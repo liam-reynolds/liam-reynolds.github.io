@@ -1,0 +1,1068 @@
+---
+title: "Untitled"
+runtime: shiny
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: scroll
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(tidycensus)
+library(urbnthemes)
+library(urbnmapr)
+library(shiny)
+library(leaflet)
+library(sf)
+library(tigris)
+library(ipumsr)
+library(highcharter)
+library(readxl)
+
+set_urbn_defaults(style = "print")
+
+###Homeownership rate gap
+hor_gap_data <- read_xlsx("hor_gap.xlsx") %>% 
+  pivot_longer(black:all, names_to = "race", values_to = "hor")
+
+###Geographic data
+
+msa_acs <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+               year = 2019,
+               survey = "acs5",
+               variable = "B19013_001"
+) %>% 
+  select(msa_code = GEOID, msa_name = NAME) %>% 
+  filter(str_detect(msa_name, "GA"))
+
+crosswalk <- read.csv("crosswalk.csv") %>% 
+  select(cbsacode, cbsatitle, fipsstatecode, fipscountycode) %>% 
+  mutate(state_fips = str_pad(fipsstatecode, 2, "left", "0"),
+         county_fips = str_pad(fipscountycode, 3, "left", "0"),
+         county_fips = str_c(state_fips, county_fips),
+         cbsacode = as.character(cbsacode))
+
+msa_list <- msa_acs %>% 
+  left_join(crosswalk, by = c("msa_code" = "cbsacode"))
+  
+  
+county_list <- get_acs(geography = "county",
+                       state = "GA",
+                       year = 2019,
+                       survey = "acs5",
+                       variable = "B19013_001") %>% 
+  select(county_fips = GEOID, county_name = NAME)
+
+tract_list <- get_acs(geography = "tract",
+                       state = "GA",
+                       year = 2019,
+                       survey = "acs5",
+                       variable = "B19013_001") %>% 
+  select(fips = GEOID, tract_name = NAME) %>% 
+  mutate(county_fips = str_sub(fips, 1, 5))
+
+counties_tracts <- tract_list %>% 
+  left_join(county_list, by = "county_fips")
+
+
+msa_county_tract <- msa_list %>% 
+  left_join(counties_tracts, by = "county_fips")
+
+map_tract <- get_acs(geography = "tract",
+                    state = "GA",
+                    year = 2019,
+                    survey = "acs5",
+                    variable = "B19013_001",
+                    geometry = TRUE
+) %>% 
+  select(-estimate, -moe, -variable) %>% 
+  rename(fips = GEOID) %>% 
+  mutate(county_fips = str_sub(fips, 1, 5)) %>%
+  left_join(counties_tracts, by = "fips")
+
+
+msa_geo <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+               year = 2019,
+               survey = "acs5",
+               variable = "B19013_001",
+               geometry = TRUE
+               ) %>% 
+  select(msa_code = GEOID, msa_name = NAME, geometry)
+
+map_data <- map_tract %>% 
+  st_join(msa_geo, join = st_within)
+
+pal <- colorFactor(
+  palette = "magma",
+  domain = map_data$county_name
+)
+
+###Chart Data
+
+##Demographics
+
+dem_tract <- get_acs(geography = "tract",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(white = "B25003H_001",
+                                   black = "B25003B_001",
+                                   latino = "B25003I_001",
+                                   aian = "B25003C_001",
+                                   asian = "B25003D_001",
+                                   islander = "B25003E_001",
+                                   other = "B25003F_001",
+                                   multiple = "B25003G_001"),
+                     summary_var = c(tot = "B25003_001")
+) %>% 
+  mutate(race = case_when(variable %in% c("white", "black", "latino") ~ variable,
+                          TRUE ~ "other")) %>% 
+  group_by(GEOID, race) %>% 
+  summarise(hh = sum(estimate),
+            hh_tot = summary_est,
+            tract_name = NAME) %>% 
+  unique()
+
+
+dem_county <- get_acs(geography = "county",
+                      state = "GA",
+                      year = 2019,
+                      survey = "acs5",
+                      variables = c(white = "B25003H_001",
+                                    black = "B25003B_001",
+                                    latino = "B25003I_001",
+                                    aian = "B25003C_001",
+                                    asian = "B25003D_001",
+                                    islander = "B25003E_001",
+                                    other = "B25003F_001",
+                                    multiple = "B25003G_001"),
+                      summary_var = c(tot = "B25003_001")
+) %>% 
+  mutate(race = case_when(variable %in% c("white", "black", "latino") ~ variable,
+                          TRUE ~ "other")) %>% 
+  group_by(GEOID, race) %>% 
+  summarise(hh = sum(estimate),
+            hh_tot = summary_est,
+            tract_name = NAME) %>% 
+  unique()
+
+dem_msa <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+                      year = 2019,
+                      survey = "acs5",
+                      variables = c(white = "B25003H_001",
+                                    black = "B25003B_001",
+                                    latino = "B25003I_001",
+                                    aian = "B25003C_001",
+                                    asian = "B25003D_001",
+                                    islander = "B25003E_001",
+                                    other = "B25003F_001",
+                                    multiple = "B25003G_001"),
+                      summary_var = c(tot = "B25003_001")
+) %>% 
+  mutate(race = case_when(variable %in% c("white", "black", "latino") ~ variable,
+                          TRUE ~ "other")) %>% 
+  group_by(GEOID, race) %>% 
+  summarise(hh = sum(estimate),
+            hh_tot = summary_est,
+            tract_name = NAME) %>% 
+  unique()
+
+  
+dem_shares_tract <- dem_tract %>% 
+  select(tract_fips = GEOID, tract_name, race, hh, hh_tot) %>% 
+  mutate(county_fips = str_sub(tract_fips, 1, 5),
+         county_fips_race = case_when(race == "black" ~ paste0(county_fips, "_b"),
+         race == "white" ~ paste0(county_fips, "_w"),
+         race == "latino" ~ paste0(county_fips, "_l"),
+         TRUE ~ paste0(county_fips, "_o")
+  )) %>% 
+  group_by(tract_fips, race) %>% 
+  summarise(tract = (hh / hh_tot) * 100,
+            tract_name = tract_name,
+            county_fips_race = county_fips_race)
+
+
+dem_shares_county <- dem_county %>% 
+  select(county_fips = GEOID, race, hh, hh_tot) %>% 
+  mutate(county_fips_race = case_when(race == "black" ~ paste0(county_fips, "_b"),
+                                      race == "white" ~ paste0(county_fips, "_w"),
+                                      race == "latino" ~ paste0(county_fips, "_l"),
+                                      TRUE ~ paste0(county_fips, "_o"))) %>% 
+  group_by(county_fips, race) %>% 
+  summarise(county = (hh / hh_tot) * 100,
+            county_fips_race = county_fips_race)
+
+
+dem_shares_msa <- dem_msa %>% 
+  select(cbsa_fips = GEOID, race, hh, hh_tot) %>%
+  left_join(crosswalk, by = c("cbsa_fips" = "cbsacode")) %>% 
+  select(-cbsatitle, -fipsstatecode, -fipscountycode, -state_fips)  %>% 
+  mutate(county_fips_race = case_when(race == "black" ~ paste0(county_fips, "_b"),
+                                      race == "white" ~ paste0(county_fips, "_w"),
+                                      race == "latino" ~ paste0(county_fips, "_l"),
+                                      TRUE ~ paste0(county_fips, "_o"))) %>% 
+  group_by(cbsa_fips, race) %>% 
+  summarise(msa = (hh / hh_tot) * 100,
+            county_fips_race = county_fips_race)
+
+dem_chart <- dem_shares_tract %>% 
+  left_join(dem_shares_county, by = "county_fips_race") %>% 
+  left_join(dem_shares_msa, by = "county_fips_race") %>% 
+  select(tract_fips, tract_name, race = race.x, tract, county, msa) %>% 
+  pivot_longer(cols = tract:msa, names_to = "geo_type", values_to = "household_share") 
+
+##HOR
+#HOR TRACT
+black_acs <- get_acs(geography = "tract",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(black_ownocc = "B25003B_002"),
+                     summary_var = "B25003B_001"
+)
+
+white_acs <- get_acs(geography = "tract",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(white_ownocc = "B25003H_002"),
+                     summary_var = "B25003A_001"
+  
+)
+
+tot_acs <- get_acs(geography = "tract",
+                   state = "GA",
+                   year = 2019,
+                   survey = "acs5",
+                   variables = c(ownocc = "B25003_002"),
+                   summary_var = "B25003_001"
+)
+
+black_hor <- black_acs %>% 
+  mutate(black_hor = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, black_hor)
+  
+white_hor <- white_acs %>% 
+  mutate(white_hor = (estimate / summary_est) * 100) %>% 
+  select(GEOID, white_hor)
+
+tot_hor <- tot_acs %>% 
+  mutate(tot_hor = (estimate / summary_est) * 100) %>% 
+  select(GEOID, tot_hor)
+
+#HOR COUNTY
+black_acs_county <- get_acs(geography = "county",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(black_ownocc = "B25003B_002"),
+                     summary_var = "B25003B_001"
+)
+
+white_acs_county <- get_acs(geography = "county",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(white_ownocc = "B25003H_002"),
+                     summary_var = "B25003A_001"
+  
+)
+
+tot_acs_county <- get_acs(geography = "county",
+                   state = "GA",
+                   year = 2019,
+                   survey = "acs5",
+                   variables = c(ownocc = "B25003_002"),
+                   summary_var = "B25003_001"
+)
+
+black_hor_county <- black_acs_county %>% 
+  mutate(black_hor_county = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, black_hor_county)
+  
+white_hor_county <- white_acs_county %>% 
+  mutate(white_hor_county = (estimate / summary_est) * 100) %>% 
+  select(GEOID, white_hor_county)
+
+tot_hor_county <- tot_acs_county %>% 
+  mutate(tot_hor_county = (estimate / summary_est) * 100) %>% 
+  select(GEOID, tot_hor_county)
+
+#HOR MSA 
+black_acs_msa <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+                         year = 2019,
+                         survey = "acs5",
+                         variables = c(black_ownocc = "B25003B_002"),
+                         summary_var = "B25003B_001"
+)
+
+
+white_acs_msa <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+                         year = 2019,
+                         survey = "acs5",
+                         variables = c(white_ownocc = "B25003H_002"),
+                         summary_var = "B25003A_001"
+)
+
+tot_acs_msa <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+                   year = 2019,
+                   survey = "acs5",
+                   variables = c(ownocc = "B25003_002"),
+                   summary_var = "B25003_001"
+)
+
+black_hor_msa <- black_acs_msa %>% 
+  mutate(black_hor_msa = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, black_hor_msa) 
+  
+white_hor_msa <- white_acs_msa %>% 
+  mutate(white_hor_msa = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, white_hor_msa) 
+ 
+tot_hor_msa <- tot_acs_msa %>% 
+  mutate(tot_hor_msa = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, tot_hor_msa)
+  
+hor_tract <- black_hor %>% 
+  left_join(white_hor, by = "GEOID") %>% 
+  left_join(tot_hor, by = "GEOID") %>% 
+  mutate(county_fips = str_sub(GEOID, 1, 5)) %>% 
+  pivot_longer(cols = c("black_hor", "white_hor", "tot_hor")) %>% 
+  mutate(county_fips_race = case_when(name == "black_hor" ~ paste0(county_fips, "_b"),
+                                      name == "white_hor" ~ paste0(county_fips, "_w"),
+                                      TRUE ~ paste0(county_fips, "_t"))
+         )
+
+
+hor_county <- black_hor_county %>% 
+  left_join(white_hor_county) %>% 
+  left_join(tot_hor_county) %>% 
+  pivot_longer(cols = c("black_hor_county", "white_hor_county", "tot_hor_county")) %>% 
+  mutate(county_fips_race = case_when(name == "black_hor_county" ~ paste0(GEOID, "_b"),
+                                      name == "white_hor_county" ~ paste0(GEOID, "_w"),
+                                      TRUE ~ paste0(GEOID, "_t"))
+         )
+
+hor_msa <- black_hor_msa %>% 
+  left_join(white_hor_msa) %>% 
+  left_join(tot_hor_msa) %>% 
+  left_join(crosswalk, by = c("GEOID" = "cbsacode")) %>% 
+  pivot_longer(cols = c("black_hor_msa", "white_hor_msa", "tot_hor_msa")) %>% 
+  mutate(county_fips_race = case_when(name =="black_hor_msa" ~ paste0(county_fips, "_b"),
+                                      name == "white_hor_msa" ~ paste0(county_fips, "_w"),
+                                      TRUE ~ paste0(county_fips, "_t"))) %>% 
+  select(-GEOID, -fipsstatecode, -fipscountycode, -state_fips, -NAME)
+
+hor_clean <- hor_tract %>% 
+  left_join(hor_county, by = "county_fips_race") %>% 
+  left_join(hor_msa, by = "county_fips_race") %>% 
+  select(fips = GEOID.x, tract_name =  NAME.x, tract = value.x, county = value.y, msa = value,               county_name = NAME.y, race = name.x) %>% 
+  pivot_longer(cols = tract:msa, names_to = "geo_type", values_to = "rate") %>% 
+  mutate(rate = (rate / 100))
+hor_clean$race <- factor(hor_clean$race, levels = c("black_hor", "white_hor", "tot_hor"))
+
+
+##Denial
+denial <- read.csv("denial_chart.csv")%>% 
+  mutate(fips = as.character(census_tract),
+         fips = str_pad(fips, 11, side = "left", pad = "0")) %>% 
+  left_join(tract_list, by = "fips") %>%
+      filter(str_starts(fips, "13", negate = FALSE))
+denial$race <- factor(denial$race, levels = c("black", "white", "tot"))
+
+
+##HOR Race, Income, Education
+ddi <- read_ipums_ddi("usa_00024.xml")
+data <- read_ipums_micro(ddi) %>% 
+ rename_all(tolower)
+
+cbsa_names <- dem_msa %>% 
+  ungroup() %>% 
+  select(GEOID, tract_name)
+
+data_clean <- data %>% 
+  filter(pernum == 1,
+         hhincome != 9999999) %>% 
+  mutate(race = case_when(race == 1 & hispan == 0 ~ "white",
+                          race == 2 & hispan == 0 ~ "black"),
+         grad = if_else(educd %in% c(081, 101, 114, 115, 116), "degree", "no degree"),
+         inc = case_when(hhincome < 50000 ~ "under 50K",
+                         hhincome >= 50000 & hhincome < 100000 ~ "50 - 100K",
+                         hhincome >= 100000 & hhincome < 150000 ~ "100 - 150K",
+                         hhincome >= 150000 ~ "150K +"),
+         met2013 = as.character(met2013)
+  ) %>% 
+  left_join(cbsa_names, by = c("met2013" = "GEOID")) %>% 
+  rename(msa_name = tract_name)
+
+hor_inc_tot_national <- data_clean %>% 
+  group_by(inc) %>% 
+  summarise(rate = sum(hhwt[ownershp == 1]) / sum(hhwt)) %>% 
+  mutate(race = "total")
+
+hor_inc_race_national <- data_clean %>% 
+  group_by(race, inc) %>% 
+  summarise(rate = sum(hhwt[ownershp == 1]) / sum(hhwt)) %>% 
+  filter(!is.na(race))
+
+hor_inc_national <- hor_inc_tot_national %>% 
+  rbind(hor_inc_race_national)
+hor_inc_national$race <- factor(hor_inc_national$race, levels = c("black", "white", "total"))
+hor_inc_national$inc <- factor(hor_inc_national$inc, levels = c("under 50K", "50 - 100K", "100 - 150K", "150K +"))
+
+hor_inc_tot <- data_clean %>% 
+  group_by(msa_name, inc) %>% 
+  summarise(rate = sum(hhwt[ownershp == 1]) / sum(hhwt)) %>% 
+  mutate(race = "total")
+
+hor_inc_race <- data_clean %>% 
+  group_by(msa_name, race, inc) %>% 
+  summarise(rate = sum(hhwt[ownershp == 1]) / sum(hhwt))
+
+hor_inc_race_chart <- hor_inc_race %>% 
+  rbind(hor_inc_tot) %>% 
+  filter(!is.na(race)) %>% 
+  arrange(msa_name, race)
+hor_inc_race_chart$race <- factor(hor_inc_race_chart$race, levels = c("black", "white", "total"))
+hor_inc_race_chart$inc <- factor(hor_inc_race_chart$inc, levels = c("under 50K", "50 - 100K", "100 - 150K", "150K +"))
+
+hor_educ_tot_national <- data_clean %>% 
+  group_by(grad) %>% 
+  summarise(rate = sum(hhwt[ownershp == 1]) / sum(hhwt)) %>% 
+  mutate(race = "total")
+
+hor_educ_race_national <- data_clean %>% 
+  group_by(race, grad) %>% 
+  summarise(rate = sum(hhwt[ownershp == 1]) / sum(hhwt))
+
+hor_educ_national <- hor_educ_race_national %>% 
+  rbind(hor_educ_tot_national) %>% 
+  filter(!is.na(race))
+
+hor_educ_tot <- data_clean %>% 
+  group_by(msa_name, grad) %>% 
+  summarise(rate = sum(hhwt[ownershp == 1]) / sum(hhwt)) %>% 
+  mutate(race = "total")
+hor_educ_national$race <- factor(hor_educ_national$race, levels = c("black", "white", "total"))
+hor_educ_national$grad <- factor(hor_educ_national$grad, levels = c("no degree", "degree"))
+
+
+
+hor_educ_race <- data_clean %>% 
+  group_by(msa_name, race, grad) %>% 
+  summarise(rate = sum(hhwt[ownershp == 1]) / sum(hhwt))
+
+hor_educ_race_chart <- hor_educ_race %>% 
+  rbind(hor_educ_tot) %>% 
+  filter(!is.na(race)) %>% 
+  arrange(msa_name, race)
+hor_educ_race_chart$race <- factor(hor_educ_race_chart$race, levels = c("black", "white", "total"))
+hor_educ_race_chart$grad <- factor(hor_educ_race_chart$grad, levels = c("no degree", "degree"))
+
+##national wealth gap
+race <- c("Black", "White")
+wealth <- c(24100, 188200)
+wealth_gap <- data.frame(race, wealth)
+
+parent_worth <- c("<10K", "$10K - 50K", "50K - 150K", "150K - 300K", ">300K")
+rate <- c(.1414, .1908, .2965, .3176, .3639)
+parent_wealth <-data.frame(parent_worth, rate)
+parent_wealth$parent_worth <- factor(parent_wealth$parent_worth, levels = c("<10K", "$10K - 50K", "50K - 150K", "150K - 300K", ">300K"))
+
+financial_health <- read_xlsx ("3_city_financial_health_metrics.xlsx") %>% 
+  rename("city_name" = "city name",
+         "Total" = "Median net worth (estimated); Overall",
+         "White" = "Median net worth (estimated); White",
+         "Black" = "Median net worth (estimated); Black") %>% 
+  mutate(White = as.numeric(White),
+         Black = as.numeric(Black)) %>% 
+  select(city_name, Black, White, Total) %>% 
+  pivot_longer(Black:Total, names_to = "race", values_to = "net_worth" )
+
+##cost burden
+ddi <- read_ipums_ddi("usa_00028.xml")
+data <- read_ipums_micro(ddi) %>% 
+  rename_all(tolower) %>% 
+  filter(pernum == 1)
+
+race <- c("Black", "White", "Total")
+burden_race_national <- c(.51, .42, .46)
+national_burden <- data.frame(race, burden_race_national)
+
+burden_msa_tot <- data %>% 
+  select(msa_name = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
+  filter(county_fips != 000,
+         rent != 0) %>% 
+  mutate(county_fips = str_pad(county_fips, 3, "left", "0"),
+         state_fips = str_pad(state_fips, 2, "left", "0"),
+         county_fips = str_c(state_fips, county_fips)) %>%
+  filter(hhincome != 9999999,
+         ownershp == 2) %>%
+  mutate(rent = (rent *12),
+         ratio = (rent / hhincome),
+         ethrace = "tot") %>% 
+  group_by(msa_name) %>% 
+  summarise(msa = (sum(hhwt[ratio >= .30] / sum(hhwt), na.rm = TRUE)),
+            county_fips = county_fips,
+            ethrace = ethrace) %>% 
+  unique()
+
+burden_msa <- data %>% 
+  select(msa_name = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
+  filter(county_fips != 000,
+         rent != 0) %>% 
+  mutate(ethrace = case_when(race == 1 & hispan == 0 ~ "white", 
+                             race == 2 & hispan == 0 ~ "black"),
+         county_fips = str_pad(county_fips, 3, "left", "0"),
+         state_fips = str_pad(state_fips, 2, "left", "0"),
+         county_fips = str_c(state_fips, county_fips)) %>%
+  filter(hhincome != 9999999,
+         ethrace %in% c("white", "black"),
+         ownershp == 2) %>%
+  mutate(rent = (rent * 12),
+         ratio = (rent / hhincome)) %>% 
+  group_by(msa_name, ethrace) %>% 
+  summarise(msa = (sum(hhwt[ratio >= .30] / sum(hhwt), na.rm = TRUE)),
+            county_fips = county_fips) %>% 
+  unique() %>% 
+  rbind(burden_msa_tot) %>%
+  arrange(msa_name, county_fips, ethrace) %>% 
+  unique() %>% 
+  mutate(county_fips_race = case_when(ethrace == "black" ~ paste0(county_fips, "_b"),
+                                      ethrace == "white" ~ paste0(county_fips, "_w"),
+                                      TRUE ~ paste0(county_fips, "_t"))
+  )
+
+  
+burden_county_tot <- data %>% 
+  select(msa_name = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
+  filter(county_fips != 000,
+         rent != 0) %>% 
+  mutate(county_fips = str_pad(county_fips, 3, "left", "0"),
+         state_fips = str_pad(state_fips, 2, "left", "0"),
+         county_fips = str_c(state_fips, county_fips)) %>%
+  filter(hhincome != 9999999,
+         ownershp == 2) %>%
+  mutate(rent = (rent * 12),
+         ratio = (rent / hhincome)) %>% 
+  group_by(county_fips) %>% 
+  summarise(county = (sum(hhwt[ratio >= .30] / sum(hhwt), na.rm = TRUE)),
+            county_fips = county_fips) %>% 
+  mutate(ethrace = "tot") %>%  
+  unique()
+
+
+burden_county <- data %>% 
+  select(msa = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
+  filter(county_fips != 000,
+         rent != 0) %>% 
+  mutate(ethrace = case_when(race == 1 & hispan == 0 ~ "white", 
+                             race == 2 & hispan == 0 ~ "black"),
+         county_fips = str_pad(county_fips, 3, "left", "0"),
+         state_fips = str_pad(state_fips, 2, "left", "0"),
+         county_fips = str_c(state_fips, county_fips)) %>%
+  filter(hhincome != 9999999,
+         ethrace %in% c("white", "black"),
+         ownershp == 2) %>%
+  mutate(rent = (rent * 12),
+         ratio = (rent / hhincome)) %>% 
+  group_by(county_fips, ethrace) %>% 
+  summarise(county = (sum(hhwt[ratio >= .30] / sum(hhwt), na.rm = TRUE)),
+            county_fips = county_fips) %>% 
+  unique() %>% 
+  rbind(burden_county_tot) %>%
+  arrange(county_fips, ethrace) %>% 
+  unique() %>% 
+  mutate(county_fips_race = case_when(ethrace == "black" ~ paste0(county_fips, "_b"),
+                                    ethrace == "white" ~ paste0(county_fips, "_w"),
+                                    TRUE ~ paste0(county_fips, "_t"))
+)
+
+
+burden <- burden_county %>% 
+  left_join(burden_msa, by = "county_fips_race") %>% 
+  select(msa_name, county_fips = county_fips.x, race = ethrace.x, msa, county) %>% 
+  arrange(msa_name, county_fips, race) %>% 
+  pivot_longer(cols = msa:county, names_to = "geo_type", values_to = "burden_share") %>% 
+  mutate(msa_name = as.character(msa_name)) %>% 
+  left_join(msa_list, by = c("msa_name" = "msa_code")) %>% 
+  select(msa_code = msa_name, msa_name = msa_name.y, county_fips = county_fips.x, race, geo_type, burden_share) %>% 
+  unique()
+burden$race <- factor(burden$race, levels = c("black", "white", "tot"))
+
+##wealth by tenure
+tenure <- c("Renter", "Owner")
+wealth <- c(6300, 255000)
+wealth_tenure <- data.frame(tenure, wealth)
+
+
+##LTV
+ltv <- read.csv("ltv_share_msa_county.csv") %>% 
+  select(derived_msa_md, county_fips, race = raceeth, below_5_county, above_20_county, below_5_msa, above_20_msa) %>% 
+  pivot_longer(cols = below_5_county:above_20_msa, names_to = "down", values_to = "rate") %>% 
+  mutate(payment = case_when(down %in% c("below_5_county", "below_5_msa") ~ "below 5",
+                             down %in% c("above_20_county", "above_20_msa") ~ "above 20"),
+         geo_type = case_when(down %in% c("below_5_county", "above_20_county") ~ "county",
+                              down %in% c("below_5_msa", "above_20_msa") ~ "msa")) %>% 
+  select(-down) %>% 
+  mutate(msa_code = as.character(derived_msa_md)) %>%
+  left_join(msa_acs, by = "msa_code") %>% 
+  filter(geo_type != "county")
+
+##Source of Down Payment
+nsmo_clean <- read.csv("nsmo_clean.csv")
+
+source_race <- nsmo_clean %>%
+  filter(race_eth %in% c("White", "Black"),
+         mortgage_reason == 1,
+         sale_proceeds != -2,
+         savings_retire_etc != -2,
+         govt_np_asst != -2,
+         second_lien_heloc != -2 & second_lien_heloc != -3,
+         gift != -2,
+         seller_cont != -2) %>% 
+  group_by(race_eth) %>% 
+  summarise(sale_proceeds = weighted.mean(sale_proceeds, w = weight, na.rm = TRUE),
+            savings_retire_etc = weighted.mean(savings_retire_etc, w = weight, na.rm = TRUE),
+            govt_np_asst = weighted.mean(govt_np_asst, w = weight, na.rm = TRUE),
+            second_lien_heloc = weighted.mean(second_lien_heloc, w = weight, na.rm = TRUE),
+            gift = weighted.mean(gift, w = weight, na.rm = TRUE),
+            seller_cont = weighted.mean(seller_cont, w = weight, na.rm = TRUE)
+            )
+
+source_tot <- nsmo_clean %>% 
+  filter(mortgage_reason == 1,
+         sale_proceeds != -2,
+         savings_retire_etc != -2,
+         govt_np_asst != -2,
+         second_lien_heloc != -2 & second_lien_heloc != -3,
+         gift != -2,
+         seller_cont != -2) %>% 
+  summarise(sale_proceeds = weighted.mean(sale_proceeds, w = weight, na.rm = TRUE),
+            savings_retire_etc = weighted.mean(savings_retire_etc, w = weight, na.rm = TRUE),
+            govt_np_asst = weighted.mean(govt_np_asst, w = weight, na.rm = TRUE),
+            second_lien_heloc = weighted.mean(second_lien_heloc, w = weight, na.rm = TRUE),
+            gift = weighted.mean(gift, w = weight, na.rm = TRUE),
+            seller_cont = weighted.mean(seller_cont, w = weight, na.rm = TRUE)
+  ) %>% 
+  mutate(race_eth = "Total")
+
+source <- source_race %>% 
+  rbind(source_tot)
+source$race_eth <- factor(source$race_eth, levels = c("Black", "White", "Total"))
+
+
+```
+
+Sidebar {.sidebar}
+======================================================================
+```{r}
+selectInput("drop_msa", label = "MSA", choices = msa_county_tract$msa_name)
+
+tract.choices = reactive({
+  msa_county_tract %>% 
+    filter(msa_name==input$drop_msa)
+})
+
+renderUI({selectInput("drop_tract", label = "Census Tract", choices = tract.choices()$tract_name)})
+
+selectInput("drop_city", label = "City (for Median Wealth Chart)", choices = financial_health$city_name)
+
+```
+
+This is a data tool and these are instructions on how to use it.
+
+The Racial Homeownership Gap
+======================================================================
+
+Row {.tabset}
+-----------------------------------------------------------------------
+
+### Homeownership Rate by Race, National 1960-2019
+Large gaps in homeownership rates and wealth persis between racial/ethnic groups as households of color face significant disadvantages relative to white households in both attaining and sustaining homeownership. The Black-white homeownership gap is almost as wide now as it was in 1960, before the Fair Housing Act was passed and when housing discrimination was still legal.
+
+```{r}
+renderPlot({
+  hor_gap_data %>% 
+    ggplot(aes(colour = race, x = year, y = hor)) +
+    geom_line(position = "identity", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "Latino", "Other", "White")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+
+
+
+```
+
+### Homeownership Rate by Race, MSA 2019
+The Black-white homeownership gap persists in most metro areas. In the Atlanta - Sandy Springs - Alpharetta MSA, the homeownership rate among white households is 70%, compared to 48% among Black households. 
+
+```{r}
+renderPlot({
+  hor_clean %>%
+    filter(geo_type != "tract") %>%
+    filter(tract_name == input$drop_tract) %>% 
+    ggplot(aes(fill = race, x = geo_type, y = rate)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+Row {.tabset}
+-----------------------------------------------------------------------
+### Denial Rate by Race, National
+The national denial rate for purchase mortgage applications is  for Black applicants, compared to  for white applicants
+
+### Denial Rate by Race, MSA
+In the Atlanta - Sandy Springs - Alpharetta MSA, the denial rate for Black applicants is , comapred to  for white applicants. 
+
+```{r}
+renderPlot({
+  denial %>% 
+    filter(geo_type != "tract") %>%
+    filter(tract_name == input$drop_tract) %>% 
+    ggplot(aes(fill = race, x = geo_type, y = denial)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+    
+})
+```
+
+Row {.tabset}
+-----------------------------------------------------------------------
+Barriers persist even when comparing among groups with similar levels of income.
+
+### Homeownership by Race and Income, National
+
+```{r}
+renderPlot({
+  hor_inc_national %>% 
+    ggplot(aes(fill = race, x = inc, y = rate)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+
+```
+
+
+### Homeownership by Race and Income, MSA
+
+```{r}
+renderPlot({
+  hor_inc_race_chart %>% 
+    filter(msa_name == input$drop_msa) %>% 
+    ggplot(aes(fill = race, x = inc, y = rate)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+
+```
+
+Row {.tabset}
+-----------------------------------------------------------------------
+Similarly, the Black-white homeownership gap remains even when comparing among groups with similar levels of educational attainment.
+
+### Homeownership by Race and Education, National
+
+```{r}
+renderPlot({
+  hor_educ_national %>% 
+    ggplot(aes(fill = race, x = grad, y = rate)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+
+
+### Homeownership by Race and Education, MSA
+
+```{r}
+renderPlot({
+  hor_educ_race_chart %>% 
+    filter(msa_name == input$drop_msa) %>% 
+    ggplot(aes(fill = race, x = grad, y = rate)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+
+
+The Wealth Gap and Homeownership
+============================================================================
+
+Row {.tabset}
+-----------------------------------------------------------------------
+
+### Median Wealth by Race, National
+Black homebuyers are less likely to have access to wealth for down payments. The median wealth for Black households is $24,000. compared to $188,000 for white households. 
+
+```{r}
+renderPlot({ 
+ wealth_gap %>% 
+    ggplot(aes(x = race, y = wealth)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+### Median Household Wealth by Race, City
+These data show median household wealth by race in cities across the country. The city-level results mirror the national results: in almost all cases the median wealth of white households is greater than the median wealth of black households. In Atlanta, the median wealth of Black households is $5,180, compared to $238,354 for white households.
+
+```{r}
+renderPlot({
+  financial_health %>% 
+    filter(city_name == input$drop_city) %>%
+    ggplot(aes(x = race, y = net_worth)) +
+    geom_bar(position = "dodge", stat = "identity") + 
+    scale_y_continuous(labels = scales::dollar_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+
+Row {.tabset}
+-----------------------------------------------------------------------
+
+### Rental Cost Burden by Race, National
+Rental cost burden is just one component driving the wealth gap. Black families are much more likely to spend at least 30% of their income on rent, meaning they have a smaller proportion of their income available to save. Nationally, 51% of Black renter households are cost burdened, comapred to only 42% of White households.
+
+```{r}
+renderPlot({ 
+ national_burden %>%   
+    ggplot(aes(x = race, y = burden_race_national)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+
+### Rental Cost Burden by Race, MSA
+In the Atlanta - Sandy Springs - Alpharetta MSA, 43% of Black Households are rental cost burdened, compared to 30% of white households. 
+
+```{r}
+renderPlot({ 
+ burden %>%   
+    filter(msa_name == input$drop_msa) %>% 
+    ggplot(aes(fill = race, x = geo_type, y = burden_share)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+Row 
+-----------------------------------------------------------------------
+
+### Wealth by Tenure, National
+Homeownership is also a wealth-building vehicle, and the historic homeownership gap has limited wealth building opportunities for Black households. The median net worth for a homeowning household is $255,000, compared to only $6,300 for renters
+
+```{r}
+renderPlot({ 
+  wealth_tenure %>% 
+    ggplot(aes(x = tenure, y = wealth)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+
+})
+```
+
+
+Row 
+-----------------------------------------------------------------------
+
+### Homeownership Rate by Parental Wealth, National
+Intergenerational wealth transfers also impact the ability to achieve homeownership. Homeownership rates increase as parental wealth increases.
+
+```{r}
+renderPlot({ 
+ parent_wealth %>% 
+    ggplot(aes(x = parent_worth, y = rate)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+Row {.tabset}
+-----------------------------------------------------------------------
+### Percent of households putting down 5% or below and 20% or above by race, National
+The wealth gap manifests in lower downpayments for Black households, limiting their homebuying options. Nationally, the median down payment for Black households is , compared to  for white households
+
+### Percent of households putting down 5% or below and 20% or above by race, MSA
+In the Atlanta - Sandy Springs - Alpharetta MSA, only 11% of Black households put down at least 20% on their home, comapred to 42% of white households.
+
+```{r}
+renderPlot({
+  ltv %>% 
+    filter(msa_name == input$drop_msa) %>% 
+    ggplot(aes(fill = race, x = payment, y = rate)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+
+Row
+-----------------------------------------------------------------------
+
+### Used Gov't or Nonprofit Downpayment Assistance, National
+13% of Black households used government or nonprofit downpayment assistance, compared to only 6% of white households, further indicating that Black downpayment savings remain a barrier for Black households. 
+
+```{r}
+renderPlot({
+  source %>% 
+    ggplot(aes(x = race_eth, y = govt_np_asst)) +
+    geom_bar(position = "dodge", stat = "identity") + 
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+
+})
+
+```
+
+Market Analysis
+============================================================================
+
+Row
+-----------------------------------------------------------------------
+
+### County and Tract Map
+
+```{r map}
+
+renderLeaflet({
+  map_data %>% 
+    filter(msa_name == input$drop_msa) %>% 
+    leaflet() %>% 
+    addProviderTiles(providers$Stamen.TonerLite) %>% 
+    addPolygons(color = ~pal(county_name),
+                weight = 0.5,
+                label = ~tract_name,
+                layerId = ~tract_name)
+})
+```
+
+Row 
+-----------------------------------------------------------------------
+
+### Demographics
+
+```{r}
+renderPlot({
+  dem_chart %>%
+    filter(geo_type != "tract") %>%
+    filter(tract_name == input$drop_tract) %>% 
+    ggplot(aes(fill = race, x = geo_type, y = household_share)) +
+    geom_bar(position = "fill", stat = "identity") +
+    scale_fill_discrete(name = "Race", labels = c("Black", "Latino", "Other", "White")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20))
+})
+```
+
+
