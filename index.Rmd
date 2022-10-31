@@ -20,7 +20,12 @@ set_urbn_defaults(style = "print")
 
 ###Homeownership rate gap
 hor_gap_data <- read_xlsx("hor_gap.xlsx") %>% 
-  pivot_longer(black:all, names_to = "race", values_to = "hor")
+  pivot_longer(black:all, names_to = "race", values_to = "hor") %>% 
+  mutate(race = case_when(race == "all" ~ "total",
+                          TRUE ~ race
+    
+  ))
+  
 
 ###Geographic data
 
@@ -271,6 +276,7 @@ denial_race <- c("Black", "White", "Total")
 denial_rate <- c(0.245, 0.105, 0.134)
 
 denial_national <- data.frame(denial_race, denial_rate)
+denial_national$denial_race <- factor(denial_national$denial_race, levels = c("Black", "White", "Total"))
 
 ##HOR Race, Income, Education
 ddi <- read_ipums_ddi("usa_00024.xml")
@@ -379,6 +385,7 @@ financial_health <- read_xlsx ("3_city_financial_health_metrics.xlsx") %>%
          Black = as.numeric(Black)) %>% 
   select(city_name, Black, White, Total) %>% 
   pivot_longer(Black:Total, names_to = "race", values_to = "net_worth" )
+financial_health$race <- factor(financial_health$race, levels = c("Black", "White", "Total"))
 
 ##cost burden
 ddi <- read_ipums_ddi("usa_00028.xml")
@@ -386,9 +393,10 @@ data <- read_ipums_micro(ddi) %>%
   rename_all(tolower) %>% 
   filter(pernum == 1)
 
-race <- c("Black", "White", "Total")
-burden_race_national <- c(.51, .42, .46)
+race <- c("Black", "Total", "White")
+burden_race_national <- c(.51, .46, .42)
 national_burden <- data.frame(race, burden_race_national)
+
 
 burden_msa_tot <- data %>% 
   select(msa_name = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
@@ -559,8 +567,17 @@ source$race_eth <- factor(source$race_eth, levels = c("Black", "White", "Total")
 
 ```
 
-The Racial Homeownership Gap
+State of the Gap: Homeownership Disparities by Race and Ethnicity
 ============================================================================
+
+Large gaps in homeownership rates and wealth persist between racial/ethnic groups as households of color face significant disadvantages relative to white households in both attaining and sustaining homeownership. The Black-white homeownership rate gap is almost as wide now as it was in 1960, when the Fair Housing Act had not yet been passed and housing discrimination was still legal (McCargo & Choi 2020).  The persistence of these gaps, long after overtly discriminatory practices have been barred, is evidence of the systemic barriers that still prevent people of color from receiving credit, or receiving it on terms as favorable as white borrowers. 
+
+In the mid-20th century, the Federal Home Owner’s Loan Corporation (HOLC), the pre-curser to the Federal Housing Agency, explicitly and systematically denied mortgage lending to communities that were predominantly non-white through a process known as redlining Rothstein, 2017). Racially restrictive covenants in the early 20th  century prohibited African Americans, Latinos, Asians and other non-white households from purchasing or owning homes in certain, often affluent and white, communities (Turner a nd Greene). People of color had less access to the 30-year mortgages, revolving credit, and Federal Deposit Insurance Corporation–backed bank accounts that underpinne d the growing middle class. In their absence, costlier, riskier, and less regulated alternatives filled the void, using busine ss models that often trapped people in cycles of debt” (Perry, Choi, and Reynolds blog) and limited their ability to build a traditional credit history. For example, Black homebuyers disproportionately utilized land sale contracts to purchase housing, which lack the protections of mortgage financing in default scenarios. Between 1950-1970, in Chicago alone it is estimated land sale contracts stripped Black households of between 3.2 and 4.0 billion in wealth. (George et al. 2019, Brown 2016). 
+
+More recently, driven by targeted lending of predatory products to borrowers of color, the great recession had a greater negative economic impact on homeowners of color. During the foreclosure crisis Black and Hispanic households were 76 and 71 percent more likely to be foreclosed on than white owners, respectively. (Bocian, Li and Ernst 2010, Neal and McCargo 2020, Choi et al. 2019). Negative shocks like recessions and natural disasters still disproportionally impact homeowners of color, widening gaps and setting vulnerable households further back. Prohibitively tight credit in the aftermath of the 2008 recession reduced lending to Black and Hispanic borrowers by 76 and 78 percent from 2005 to 2012 (Goodman, Zhu and George 2014). 
+
+The staple legislation aimed at remedying historic lending discrimination, the Community Reinvestment Act (CRA), has fallen short of creating equal access to housing credit . Majority-minority communities receive less lending as a share of households than white neighborhoods, and research demonstrates that low-to-moderate designation that guides CRA activity is not a strong proxy for race (Goodman et al. 2022).
+
 
 Homeownership Rates {.tabset}
 -----------------------------------------------------------------------
@@ -573,7 +590,7 @@ Large gaps in homeownership rates and wealth persis between racial/ethnic groups
   hor_gap_data %>% 
     ggplot(aes(colour = race, x = year, y = hor)) +
     geom_line(position = "identity", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "Latino", "Other", "White")) +
+    scale_colour_discrete(name = "", labels = c("Black", "Total", "White")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -595,7 +612,7 @@ The Black-white homeownership gap persists in most metro areas. In the Atlanta -
   hor_msa %>%
     ggplot(aes(x = race, y = rate)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -617,7 +634,7 @@ The national denial rate for purchase mortgage applications is 25% for Black app
   denial_national %>% 
     ggplot(aes(x = denial_race, y = denial_rate)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_fill_discrete(labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -631,14 +648,14 @@ The national denial rate for purchase mortgage applications is 25% for Black app
 
 
 ### Denial Rate by Race, MSA
-In the Atlanta - Sandy Springs - Alpharetta MSA, the denial rate for Black applicants is , comapred to  for white applicants. 
+In the Atlanta - Sandy Springs - Alpharetta MSA, the denial rate for Black applicants is 16%, comapred to 7% for white applicants. 
 
 ```{r echo = FALSE}
 
   denial_msa_atlanta %>% 
     ggplot(aes(x = race, y = denial)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -662,7 +679,8 @@ Barriers persist even when comparing among groups with similar levels of income.
   hor_inc_national %>% 
     ggplot(aes(fill = race, x = inc, y = rate)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("Under\n$50k", "$50 -\n$100k", "$100 -\n $150k", "$150k +")) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +  
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -682,7 +700,8 @@ Barriers persist even when comparing among groups with similar levels of income.
     filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area") %>% 
     ggplot(aes(fill = race, x = inc, y = rate)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("Under\n$50k", "$50 -\n$100k", "$100 -\n $150k", "$150k +")) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +  
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -706,7 +725,8 @@ Similarly, the Black-white homeownership gap remains even when comparing among g
   hor_educ_national %>% 
     ggplot(aes(fill = race, x = grad, y = rate)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("No Degree", "Degree")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -727,7 +747,8 @@ Similarly, the Black-white homeownership gap remains even when comparing among g
     filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area") %>% 
     ggplot(aes(fill = race, x = grad, y = rate)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("No Degree", "Degree")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -739,8 +760,15 @@ Similarly, the Black-white homeownership gap remains even when comparing among g
 ```
 
 
-The Wealth Gap and Homeownership
+Wealth Disparities: Black Renters are Less Likely to Have Access to Wealth for Down Payments
 ============================================================================
+
+Black and Latino families consistently cite lack of cash for downpayment and closing costs as the primary barrier to becoming homeowners (Goodman et al 2018). Black and Latino families have a fraction of the wealth of white families (see charts below). When cars (which are non-liquid assets and over overvalued by owners) are removed from the calculation, the median white families’ wealth goes from about 10 times the wealth of the median Black family and 8 times the wealth of the median Hispanic family, to more than 30 times the wealth of the median Black family and over 20 times the wealth of the median Hispanic family. Due to a legacy of being barred from wealth building opportunities, especially from the post WWII housing boom that created the white middle class, these gaps continue to compound from generation to generation.  Thirty percent of white families receive an inheritance or gift, compared to about 10 percent of Black families and 7 percent of Hispanic families. (Bhutta et al. 2020,).
+These wealth disparities echo into all other areas of opportunity, across generations. For example, (A STAT FROM JUNG/KRISTEN’S STUDENT DEBT PAPER ON BORROWING FOR COLLEGE WHICH IN TURN MAKES IN HARDER TO BUY A HOME)
+One report estimates that it would take the typical Latino renter household 11 years, and the typical Black renter household 14 years to save for a 5% downpayment; and this does not even factor in closing costs and reserve requirements. Black and Latino renting households have less Black households are less likely to have had parents that were homeowners and/ or owned over $200,000 in wealth, both of which greatly increase the likelihood of becoming an owner (Ch o i,  Zhu & Go o d ma n 2 0 1 8 ).  The median net worth of parents of young white adults is over $200,000, compared to less than $20,000 for parents of young Black adults and $35,000 for parents of young Latino adults. Gifts from relatives account for approximately 32% percent of down-payments for first-time home buyers  Na t io n a l Asso cia t io n  o f Re a lt o rs 2 019), and loans from family and friends are also a substantial source of downpayment (Zillow 2022). More than 1.7 million mortgage-ready young Black renters could afford a median-price home in the 31 most-populous metropolitan statistical areas if they could come up with a funds to close (McCa rgo, Ch oi, a n d Goldin g 2 0 1 9 ). 
+In 2019, households of color accounted for 32 percent of all households but only held 24 percent of primary-residence housing wealth (Neal et al.2021, Dettling et al.2017). Even when they do become homeowners, they often do not reap the same wealth-building benefits as white households. There is evidence that homes owned by people of color as well as homes located in majority non-white communities are systematically undervalued by appraisers (by $48,000 per home on average) and these homes are susceptible to larger errors even in automated-valuat ions (Pe rry  2018, Ne a l, St roch a k a n d Young 2 0 2 0)
+
+
 
 Median Household Wealth {.tabset}
 -----------------------------------------------------------------------
@@ -814,7 +842,8 @@ In the Atlanta - Sandy Springs - Alpharetta MSA, 43% of Black Households are ren
     filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area") %>% 
     ggplot(aes(fill = race, x = geo_type, y = burden_share)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("County", "MSA")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -854,6 +883,7 @@ Intergenerational wealth transfers also impact the ability to achieve homeowners
     ggplot(aes(x = parent_worth, y = rate)) +
     geom_bar(position = "dodge", stat = "identity") +
     scale_y_continuous(labels = scales::percent_format()) +
+    scale_x_discrete(labels = c("Less than\n$10k", "$10k -\n$50k", "$50k -\n$150k", "$150k -\n$300", "$300k\n and above")) +
     xlab("") +
     ylab("") +
     theme(axis.text.x = element_text(size= 20),
@@ -866,14 +896,15 @@ Intergenerational wealth transfers also impact the ability to achieve homeowners
 Race and Downpayments {.tabset}
 -----------------------------------------------------------------------
 ### Percent of households putting down 5% or below and 20% or above by race, National
-The wealth gap manifests in lower downpayments for Black households, limiting their homebuying options. Nationally, the median down payment for Black households is , compared to  for white households
+The wealth gap manifests in lower downpayments for Black households, limiting their homebuying options. Nationally, only 11% of Black households put down at least 20% on their home, compared to 39% for white households
 
 ```{r echo = FALSE}
 
   ltv_national %>% 
     ggplot(aes(fill = raceeth, x = down, y = rate)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("At least 20%", "5% and below")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -894,7 +925,8 @@ In the Atlanta - Sandy Springs - Alpharetta MSA, only 11% of Black households pu
     filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area") %>% 
     ggplot(aes(fill = race, x = payment, y = rate)) +
     geom_bar(position = "dodge", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("At least 20%", "5% and below")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -914,7 +946,7 @@ In the Atlanta - Sandy Springs - Alpharetta MSA, only 11% of Black households pu
   source %>% 
     ggplot(aes(x = race_eth, y = govt_np_asst)) +
     geom_bar(position = "dodge", stat = "identity") + 
-    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -928,7 +960,7 @@ In the Atlanta - Sandy Springs - Alpharetta MSA, only 11% of Black households pu
 
 Market Analysis {.tabset}
 -----------------------------------------------------------------------
-This is a placeholder for a section that will include information that will help lenders target their programs. It can include demographics, other thigns. 
+This is a placeholder for a section that will include information to  help lenders target their programs. We will work with lenders to determine what would be most useful to include in this section. This example contains demographic information for Barrow County, GA and the Atlanta, GA MSA. 
 
 ##Demographics
 ```{r echo = FALSE}
@@ -938,7 +970,8 @@ This is a placeholder for a section that will include information that will help
     filter(tract_name == "Census Tract 1802.03, Barrow County, Georgia") %>% 
     ggplot(aes(fill = race, x = geo_type, y = household_share)) +
     geom_bar(position = "fill", stat = "identity") +
-    scale_fill_discrete(name = "Race", labels = c("Black", "Latino", "Other", "White")) +
+    scale_fill_discrete(name = "", labels = c("Black", "Latino", "Other", "White")) +
+    scale_x_discrete(labels = c("County", "MSA")) +
     scale_y_continuous(labels = scales::percent_format()) +
     xlab("") +
     ylab("") +
@@ -948,6 +981,10 @@ This is a placeholder for a section that will include information that will help
           legend.text = element_text(size = 20))
 
 ```
+
+
+
+
 
 
 
