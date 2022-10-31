@@ -962,7 +962,7 @@ Market Analysis {.tabset}
 -----------------------------------------------------------------------
 This is a placeholder for a section that will include information to  help lenders target their programs. We will work with lenders to determine what would be most useful to include in this section. This example contains demographic information for Barrow County, GA and the Atlanta, GA MSA. 
 
-##Demographics
+### Demographics
 ```{r echo = FALSE}
 
   dem_chart %>%
