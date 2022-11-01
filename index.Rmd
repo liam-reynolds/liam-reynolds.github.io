@@ -213,6 +213,18 @@ dem_chart <- dem_shares_tract %>%
   select(tract_fips, tract_name, race = race.x, tract, county, msa) %>% 
   pivot_longer(cols = tract:msa, names_to = "geo_type", values_to = "household_share") 
 
+residence_race <- c("Asian", "Black", "Latino", "Other", "White")
+
+household <- c(.06, .16, .12, .03, .63)
+residence_wealth <- c(.08, .06, .09, .02, .75)
+dist_household_home_wealth <- data.frame(residence_race, household, residence_wealth) %>% 
+  pivot_longer(household:residence_wealth, names_to = "household_wealth", values_to = "share")
+
+household <- c(.053, .443, .039, .019, .446)
+residence_wealth <- c(.051, .174, .038, .021, .715)
+dist_household_home_wealth_atl <- data.frame(residence_race, household, residence_wealth) %>% 
+  pivot_longer(household:residence_wealth, names_to = "household_wealth", values_to = "share")
+
 ##HOR
 #HOR MSA 
 black_acs_msa <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
@@ -572,17 +584,17 @@ State of the Gap: Homeownership Disparities by Race and Ethnicity
 
 Large gaps in homeownership rates and wealth persist between racial/ethnic groups as households of color face significant disadvantages relative to white households in both attaining and sustaining homeownership. The Black-white homeownership rate gap is almost as wide now as it was in 1960, when the Fair Housing Act had not yet been passed and housing discrimination was still legal (McCargo & Choi 2020).  The persistence of these gaps, long after overtly discriminatory practices have been barred, is evidence of the systemic barriers that still prevent people of color from receiving credit, or receiving it on terms as favorable as white borrowers. 
 
-In the mid-20th century, the Federal Home Owner’s Loan Corporation (HOLC), the pre-curser to the Federal Housing Agency, explicitly and systematically denied mortgage lending to communities that were predominantly non-white through a process known as redlining Rothstein, 2017). Racially restrictive covenants in the early 20th  century prohibited African Americans, Latinos, Asians and other non-white households from purchasing or owning homes in certain, often affluent and white, communities (Turner a nd Greene). People of color had less access to the 30-year mortgages, revolving credit, and Federal Deposit Insurance Corporation–backed bank accounts that underpinne d the growing middle class. In their absence, costlier, riskier, and less regulated alternatives filled the void, using busine ss models that often trapped people in cycles of debt” (Perry, Choi, and Reynolds blog) and limited their ability to build a traditional credit history. For example, Black homebuyers disproportionately utilized land sale contracts to purchase housing, which lack the protections of mortgage financing in default scenarios. Between 1950-1970, in Chicago alone it is estimated land sale contracts stripped Black households of between 3.2 and 4.0 billion in wealth. (George et al. 2019, Brown 2016). 
+In the mid-20th century, the Federal Home Owner’s Loan Corporation (HOLC), the pre-curser to the Federal Housing Agency, explicitly and systematically denied mortgage lending to communities that were predominantly non-white through a process known as redlining (Rothstein, 2017). Racially restrictive covenants in the early 20th  century prohibited African Americans, Latinos, Asians and other non-white households from purchasing or owning homes in certain, often affluent and white, communities (Turner and Greene). People of color had less access to the 30-year mortgages, revolving credit, and Federal Deposit Insurance Corporation–backed bank accounts that underpinned the growing middle class. In their absence, costlier, riskier, and less regulated alternatives filled the void, using business models that often trapped people in cycles of debt and limited their ability to build a traditional credit history (Perry, Choi, and Reynolds blog). For example, Black homebuyers disproportionately utilized land sale contracts to purchase housing, which lack the protections of mortgage financing in default scenarios. Between 1950-1970, in Chicago alone it is estimated land sale contracts stripped Black households of between 3.2 and 4.0 billion in wealth. (George et al. 2019, Brown 2016). 
 
-More recently, driven by targeted lending of predatory products to borrowers of color, the great recession had a greater negative economic impact on homeowners of color. During the foreclosure crisis Black and Hispanic households were 76 and 71 percent more likely to be foreclosed on than white owners, respectively. (Bocian, Li and Ernst 2010, Neal and McCargo 2020, Choi et al. 2019). Negative shocks like recessions and natural disasters still disproportionally impact homeowners of color, widening gaps and setting vulnerable households further back. Prohibitively tight credit in the aftermath of the 2008 recession reduced lending to Black and Hispanic borrowers by 76 and 78 percent from 2005 to 2012 (Goodman, Zhu and George 2014). 
+More recently, driven by targeted lending of predatory products to borrowers of color, the great recession had a greater negative economic impact on homeowners of color. During the foreclosure crisis, Black and Hispanic households were 76 and 71 percent more likely to be foreclosed on than white owners, respectively. (Bocian, Li and Ernst 2010, Neal and McCargo 2020, Choi et al. 2019). Negative shocks like recessions and natural disasters still disproportionally impact homeowners of color, widening gaps and setting vulnerable households further back. Prohibitively tight credit in the aftermath of the 2008 recession reduced lending to Black and Hispanic borrowers by 76 and 78 percent from 2005 to 2012 (Goodman, Zhu and George 2014). 
 
-The staple legislation aimed at remedying historic lending discrimination, the Community Reinvestment Act (CRA), has fallen short of creating equal access to housing credit . Majority-minority communities receive less lending as a share of households than white neighborhoods, and research demonstrates that low-to-moderate designation that guides CRA activity is not a strong proxy for race (Goodman et al. 2022).
+The staple legislation aimed at remedying historic lending discrimination, the Community Reinvestment Act (CRA), has fallen short of creating equal access to housing credit. Majority-minority communities receive less lending as a share of households than white neighborhoods, and research demonstrates that low-to-moderate designation that guides CRA activity is not a strong proxy for race (Goodman et al. 2022).
 
 
 Homeownership Rates {.tabset}
 -----------------------------------------------------------------------
 
-### Homeownership Rate by Race, National 1960-2019
+### Homeownership Rate by Race, National 1960 - 2021
 Large gaps in homeownership rates and wealth persis between racial/ethnic groups as households of color face significant disadvantages relative to white households in both attaining and sustaining homeownership. The Black-white homeownership gap is almost as wide now as it was in 1960, before the Fair Housing Act was passed and when housing discrimination was still legal.
 
 ```{r echo = FALSE}
@@ -592,19 +604,22 @@ Large gaps in homeownership rates and wealth persis between racial/ethnic groups
     geom_line(position = "identity", stat = "identity") +
     scale_colour_discrete(name = "", labels = c("Black", "Total", "White")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Homeownership Rate by Race, National 1960 - 2021") +
+    xlab("Year") +
+    ylab("Homeownership Rate") +
+    labs(caption = "Source: Urban Institute Calculation of Census Bureau Data.\nNote: numbers through 2019 are from Census Bureau microdata. 2020 and 2021 numbers are from Census Bureau datatables, and racial category definitions\nare not perfectlyaligned between the two.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 
 
 
 ```
 
-### Homeownership Rate by Race, MSA 2019
+### Homeownership Rate by Race, MSA
 The Black-white homeownership gap persists in most metro areas. In the Atlanta - Sandy Springs - Alpharetta MSA, the homeownership rate among white households is 70%, compared to 48% among Black households. 
 
 ```{r echo = FALSE}
@@ -614,12 +629,61 @@ The Black-white homeownership gap persists in most metro areas. In the Atlanta -
     geom_bar(position = "dodge", stat = "identity") +
     scale_x_discrete(labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Homeownership Rate by Race, Atlanta MSA") +
+    xlab("Race") +
+    ylab("Homeownership Rate") +
+    labs(caption = "Source: Urban Institute calculations of Census Bureau Data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+### Distribution of Households and Primary-Residence Wealth by Race, National
+Despite accounting for 16% of all households, Black households own only 6% of primary residence wealth. Conversely, white households account for 63% of households but 75% of primary residence wealth.
+
+```{r echo = FALSE}
+
+dist_household_home_wealth %>% 
+  ggplot(aes(fill = residence_race, x = household_wealth, y = share)) +
+  geom_bar(position = "fill", stat = "identity") +
+  scale_fill_discrete(name = "") +
+  scale_x_discrete(labels = c("Households", "Primary\nResidence Wealth")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  ggtitle("Distribution of Households and Primary-Residence Wealth by Race, National") +
+  xlab("") +
+  ylab("Share") +
+  labs(caption = "Source: Urban Institute calculations of Census Bureau Data.") +           theme(axis.text.x = element_text(size= 20),
+      axis.text.y = element_text(size = 20),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 20),
+      plot.caption = element_text(hjust = 0))
+
+
+```
+
+### Distribution of Households and Primary-Residence Wealth by Race, MSA
+In Atlanta, Black households account for 44% of all households, but they own only 17% of primary residence wealth. White households make up 45% of households and own 72% of primary residence wealth.
+
+```{r echo = FALSE}
+
+dist_household_home_wealth_atl %>% 
+  ggplot(aes(fill = residence_race, x = household_wealth, y = share)) +
+  geom_bar(position = "fill", stat = "identity") +
+  scale_fill_discrete(name = "") +
+  scale_x_discrete(labels = c("Households", "Primary\nResidence Wealth")) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  ggtitle("Distribution of Households and Primary-Residence Wealth by Race, Atlanta") +
+  xlab("") +
+  ylab("Share") +
+  labs(caption = "Source: Urban Institute calculations of Census Bureau Data.") +           theme(axis.text.x = element_text(size= 20),
+      axis.text.y = element_text(size = 20),
+      legend.title = element_text(size = 20),
+      legend.text = element_text(size = 20),
+      plot.caption = element_text(hjust = 0))
+
 
 ```
 
@@ -636,12 +700,15 @@ The national denial rate for purchase mortgage applications is 25% for Black app
     geom_bar(position = "dodge", stat = "identity") +
     scale_fill_discrete(labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Mortgage Application Denial Rate by Race, National") +
+    xlab("Race") +
+    ylab("Denial Rate") +
+    labs(caption = "Source: Urban Institute Calculation of 2021 HMDA Data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
     
 ```
 
@@ -657,12 +724,15 @@ In the Atlanta - Sandy Springs - Alpharetta MSA, the denial rate for Black appli
     geom_bar(position = "dodge", stat = "identity") +
     scale_x_discrete(labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Mortgage Application Denial Rate by Race, Atlanta MSA") +
+    xlab("Race") +
+    ylab("Denial Rate") +
+    labs(caption = "Source: Urban Institute Calculation of 2021 HMDA Data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
     
 ```
 
@@ -682,12 +752,15 @@ Barriers persist even when comparing among groups with similar levels of income.
     scale_x_discrete(labels = c("Under\n$50k", "$50 -\n$100k", "$100 -\n $150k", "$150k +")) +
     scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +  
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Homeownership Rate by Race and Household Income, National") +
+    xlab("Household Income") +
+    ylab("Homeownership Rate") +
+    labs(caption = "Source: Urban Institute Calculation of Census Bureau Data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -703,12 +776,15 @@ Barriers persist even when comparing among groups with similar levels of income.
     scale_x_discrete(labels = c("Under\n$50k", "$50 -\n$100k", "$100 -\n $150k", "$150k +")) +
     scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +  
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Homeownership Rate by Race and Household Income, Atlanta MSA") +
+    xlab("Household Income") +
+    ylab("Homeownership Rate") +
+    labs(caption = "Source: Urban Institute Calculation of Census Bureau Data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -728,12 +804,15 @@ Similarly, the Black-white homeownership gap remains even when comparing among g
     scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
     scale_x_discrete(labels = c("No Degree", "Degree")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Homeownership Rate by Race and Householder Educational Attainment, National") +
+    xlab("Householder Educational Attainment") +
+    ylab("Homeownership Rate") +
+    labs(caption = "Source: Urban Institute Calculation of Census Bureau Data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -750,12 +829,15 @@ Similarly, the Black-white homeownership gap remains even when comparing among g
     scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
     scale_x_discrete(labels = c("No Degree", "Degree")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Homeownership Rate by Race and Householder Educational Attainment, Atlanta MSA") +
+    xlab("Householder Educational Attainment") +
+    ylab("Homeownership Rate") +
+    labs(caption = "Source: Urban Institute Calculation of Census Bureau Data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -763,10 +845,11 @@ Similarly, the Black-white homeownership gap remains even when comparing among g
 Wealth Disparities: Black Renters are Less Likely to Have Access to Wealth for Down Payments
 ============================================================================
 
-Black and Latino families consistently cite lack of cash for downpayment and closing costs as the primary barrier to becoming homeowners (Goodman et al 2018). Black and Latino families have a fraction of the wealth of white families (see charts below). When cars (which are non-liquid assets and over overvalued by owners) are removed from the calculation, the median white families’ wealth goes from about 10 times the wealth of the median Black family and 8 times the wealth of the median Hispanic family, to more than 30 times the wealth of the median Black family and over 20 times the wealth of the median Hispanic family. Due to a legacy of being barred from wealth building opportunities, especially from the post WWII housing boom that created the white middle class, these gaps continue to compound from generation to generation.  Thirty percent of white families receive an inheritance or gift, compared to about 10 percent of Black families and 7 percent of Hispanic families. (Bhutta et al. 2020,).
-These wealth disparities echo into all other areas of opportunity, across generations. For example, (A STAT FROM JUNG/KRISTEN’S STUDENT DEBT PAPER ON BORROWING FOR COLLEGE WHICH IN TURN MAKES IN HARDER TO BUY A HOME)
-One report estimates that it would take the typical Latino renter household 11 years, and the typical Black renter household 14 years to save for a 5% downpayment; and this does not even factor in closing costs and reserve requirements. Black households are less likely to have had parents that were homeowners and/ or owned over $200,000 in wealth, both of which greatly increase the likelihood of becoming an owner (Choi,  Zhu & Goodman 2018 ). The median net worth of parents of young white adults is over $200,000, compared to less than $20,000 for parents of young Black adults and $35,000 for parents of young Latino adults. Gifts from relatives account for approximately 32% percent of down-payments for first-time home buyers  National Association  of Realtors 2019), and loans from family and friends are also a substantial source of downpayment (Zillow 2022). More than 1.7 million mortgage-ready young Black renters could afford a median-price home in the 31 most-populous metropolitan statistical areas if they could come up with a funds to close (McCargo, Choi, and Golding 2019 ). 
-In 2019, households of color accounted for 32 percent of all households but only held 24 percent of primary-residence housing wealth (Neal et al.2021, Dettling et al.2017). Even when they do become homeowners, they often do not reap the same wealth-building benefits as white households. There is evidence that homes owned by people of color as well as homes located in majority non-white communities are systematically undervalued by appraisers (by $48,000 per home on average) and these homes are susceptible to larger errors even in automated-valuations (Perry  2018, Neal, Strochak and Young 2020)
+Black and Latino families consistently cite lack of cash for downpayment and closing costs as the primary barrier to becoming homeowners (Goodman et al 2018). Black and Latino families have a fraction of the wealth of white families (see charts below). When cars (which are non-liquid assets and often overvalued by owners) are removed from the calculation, the median white family’s wealth increases from about 10 times the wealth of the median Black family and 8 times the wealth of the median Hispanic family to more than 30 times the wealth of the median Black family and over 20 times the wealth of the median Hispanic family. Due to a legacy of being barred from wealth building opportunities, especially from the post WWII housing boom that created the white middle class, these gaps continue to compound from generation to generation.  Thirty percent of white families receive an inheritance or gift, compared to about 10 percent of Black families and 7 percent of Hispanic families. (Bhutta et al. 2020,). These wealth disparities echo into all other areas of opportunity, across generations. For example, (A STAT FROM JUNG/KRISTEN’S FORTHCOMING STUDENT DEBT PAPER ON BORROWING FOR COLLEGE WHICH IN TURN MAKES IN HARDER TO BUY A HOME).
+
+One report estimates that it would take the typical Latino renter household 11 years and the typical Black renter household 14 years to save for a 5% downpayment; and this does not even factor in closing costs and reserve requirements. Black households are less likely to have had parents who were homeowners and/or owned over $200,000 in wealth, both of which greatly increase the likelihood of becoming an owner (Choi,  Zhu & Goodman 2018). The median net worth of parents of young white adults is over $200,000, compared to less than $20,000 for parents of young Black adults and $35,000 for parents of young Latino adults. Gifts from relatives account for approximately 32% percent of down-payments for first-time home buyers (National Association of Realtors 2019), and loans from family and friends are also a substantial source of downpayment (Zillow 2022). More than 1.7 million mortgage-ready young Black renters could afford a median-price home in the 31 most-populous metropolitan statistical areas if they could come up with a funds to close (McCargo, Choi, and Golding 2019). 
+
+In 2019, households of color accounted for 32 percent of all households but only held 24 percent of primary-residence housing wealth (Neal et al.2021, Dettling et al.2017). Even when they do become homeowners, they often do not reap the same wealth-building benefits as white households. There is evidence that homes owned by people of color as well as homes located in majority non-white communities are systematically undervalued by appraisers (by $48,000 per home on average) and these homes are susceptible to larger errors even in automated-valuations (Perry  2018, Neal, Strochak and Young 2020).
 
 
 
@@ -782,17 +865,21 @@ Black homebuyers are less likely to have access to wealth for down payments. The
     ggplot(aes(x = race, y = wealth)) +
     geom_bar(position = "dodge", stat = "identity") +
     scale_y_continuous(labels = scales::dollar_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Median Wealth by Race, National") +
+    xlab("Race") +
+    ylab("Median Wealth") +
+    labs(caption = "Source: 2019 Survey of Consumer Finances.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
 ### Median Household Wealth by Race, City
-These data show median household wealth by race in cities across the country. The city-level results mirror the national results: in almost all cases the median wealth of white households is greater than the median wealth of black households. In Atlanta, the median wealth of Black households is $5,180, compared to $238,354 for white households.
+City-level results mirror the national results: in almost all cases the median wealth of white households is greater than the median wealth of black households. In Atlanta, the median wealth of Black households is $5,180, compared to $238,354 for white households.
+
 
 ```{r echo = FALSE}
 
@@ -801,12 +888,15 @@ These data show median household wealth by race in cities across the country. Th
     ggplot(aes(x = race, y = net_worth)) +
     geom_bar(position = "dodge", stat = "identity") + 
     scale_y_continuous(labels = scales::dollar_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Median Household Wealth by Race, Atlanta") +
+    xlab("Race") +
+    ylab("Median Wealth") +
+    labs(caption = "Urban Institute Financial Health Dashboard.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -823,12 +913,15 @@ Rental cost burden is just one component driving the wealth gap. Black families 
     geom_bar(position = "dodge", stat = "identity") +
     scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Rental Cost Burden by Race, National") +
+    xlab("Race") +
+    ylab("Rental Cost Burden Share") +
+    labs(caption = "Source: Harvard Joint Center for Housing Studies.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -839,18 +932,22 @@ In the Atlanta - Sandy Springs - Alpharetta MSA, 43% of Black Households are ren
 ```{r echo = FALSE}
 
  burden %>%   
-    filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area") %>% 
-    ggplot(aes(fill = race, x = geo_type, y = burden_share)) +
+    filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area",
+           geo_type == "msa") %>% 
+    ggplot(aes(x = race, y = burden_share)) +
     geom_bar(position = "dodge", stat = "identity") +
     scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
-    scale_x_discrete(labels = c("County", "MSA")) +
+    scale_x_discrete(labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Rental Cost Burden by Race, Atlanta MSA") +
+    xlab("Race") +
+    ylab("Cost Burden Share") +
+    labs(caption = "Source: Urban Institute Calculations of Census Bureau data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -866,12 +963,15 @@ Homeownership is also a wealth-building vehicle, and the historic homeownership 
     ggplot(aes(x = tenure, y = wealth)) +
     geom_bar(position = "dodge", stat = "identity") +
     scale_y_continuous(labels = scales::dollar_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Median Wealth by Tenure") +
+    xlab("Tenure") +
+    ylab("Median Wealth") +
+    labs(caption = "Source: 2019 Survey of Consumer Finances") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -884,12 +984,15 @@ Intergenerational wealth transfers also impact the ability to achieve homeowners
     geom_bar(position = "dodge", stat = "identity") +
     scale_y_continuous(labels = scales::percent_format()) +
     scale_x_discrete(labels = c("Less than\n$10k", "$10k -\n$50k", "$50k -\n$150k", "$150k -\n$300", "$300k\n and above")) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Homeownership Rate by Parental Wealth, National") +
+    xlab("Parental Wealth") +
+    ylab("Homeownership Rate") +
+    labs(caption = "Source: Urban Institute calculations from Panel Study of Income Dynamics.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -906,12 +1009,15 @@ The wealth gap manifests in lower downpayments for Black households, limiting th
     scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
     scale_x_discrete(labels = c("At least 20%", "5% and below")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Percent of Households Putting Down 5% or Below and 20% or Above by Race, National") +
+    xlab("Down Payment Amount") +
+    ylab("Share of Homebuyers") +
+    labs(caption = "Urban Institute Calculations of 2021 HMDA data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -928,12 +1034,15 @@ In the Atlanta - Sandy Springs - Alpharetta MSA, only 11% of Black households pu
     scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
     scale_x_discrete(labels = c("At least 20%", "5% and below")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Percent of Households Putting Down 5% or Below and 20% or Above by Race, Atlanta MSA") +
+    xlab("Down Payment Amount") +
+    ylab("Share of Homebuyers") +
+    labs(caption = "Urban Institute Calculations of 2021 HMDA data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 ```
 
@@ -948,37 +1057,34 @@ In the Atlanta - Sandy Springs - Alpharetta MSA, only 11% of Black households pu
     geom_bar(position = "dodge", stat = "identity") + 
     scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
     scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
+    ggtitle("Share of Homebuyers who Used Government or Nonprofit Downpayment Assistance, National") +
+    xlab("Race") +
+    ylab("Share of Homebuyers") +
+    labs(caption = "Source: Urban Institute calculations from 2021 National Survey of Mortgage Originations Data.") +
     theme(axis.text.x = element_text(size= 20),
           axis.text.y = element_text(size = 20),
           legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
 
 
 ```
 
 Market Analysis {.tabset}
 -----------------------------------------------------------------------
-This is a placeholder for a section that will include information to  help lenders target their programs. We will work with lenders to determine what would be most useful to include in this section. This example contains demographic information for Barrow County, GA and the Atlanta, GA MSA. 
+This is a placeholder for a section that will include information to  help lenders target their programs. We will work with lenders to determine what would be most useful to include in this section. It will likely include an interactive map with census tract data on demographics, income, and homeownership rates by race. 
 
-### Demographics
 ```{r echo = FALSE}
 
-  dem_chart %>%
-    filter(geo_type != "tract") %>%
-    filter(tract_name == "Census Tract 1802.03, Barrow County, Georgia") %>% 
-    ggplot(aes(fill = race, x = geo_type, y = household_share)) +
-    geom_bar(position = "fill", stat = "identity") +
-    scale_fill_discrete(name = "", labels = c("Black", "Latino", "Other", "White")) +
-    scale_x_discrete(labels = c("County", "MSA")) +
-    scale_y_continuous(labels = scales::percent_format()) +
-    xlab("") +
-    ylab("") +
-    theme(axis.text.x = element_text(size= 20),
-          axis.text.y = element_text(size = 20),
-          legend.title = element_text(size = 20),
-          legend.text = element_text(size = 20))
+  map_data %>% 
+    filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area") %>% 
+    leaflet() %>% 
+    addProviderTiles(providers$Stamen.TonerLite) %>% 
+    addPolygons(color = ~pal(county_name),
+                weight = 0.5,
+                label = ~tract_name,
+                layerId = ~tract_name)
 
 ```
+
 
