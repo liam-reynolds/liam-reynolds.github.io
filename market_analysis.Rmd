@@ -1,0 +1,268 @@
+---
+title: "Data Tool Prototype"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+library(tidyverse)
+library(tidycensus)
+library(urbnthemes)
+library(urbnmapr)
+library(shiny)
+library(leaflet)
+library(sf)
+library(tigris)
+library(ipumsr)
+library(highcharter)
+library(readxl)
+library(htmltools)
+
+
+##HOR
+#HOR TRACT
+crosswalk <- read.csv("crosswalk.csv") %>% 
+  select(cbsacode, cbsatitle, fipsstatecode, fipscountycode) %>% 
+  mutate(state_fips = str_pad(fipsstatecode, 2, "left", "0"),
+         county_fips = str_pad(fipscountycode, 3, "left", "0"),
+         county_fips = str_c(state_fips, county_fips),
+         cbsacode = as.character(cbsacode))
+
+
+county_list <- get_acs(geography = "county",
+                       state = "GA",
+                       year = 2019,
+                       survey = "acs5",
+                       variable = "B19013_001") %>% 
+  select(county_fips = GEOID, county_name = NAME)
+
+tract_list <- get_acs(geography = "tract",
+                       state = "GA",
+                       year = 2019,
+                       survey = "acs5",
+                       variable = "B19013_001") %>% 
+  select(fips = GEOID, tract_name = NAME) %>% 
+  mutate(county_fips = str_sub(fips, 1, 5))
+
+counties_tracts <- tract_list %>% 
+  left_join(county_list, by = "county_fips")
+
+black_acs <- get_acs(geography = "tract",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(black_ownocc = "B25003B_002"),
+                     summary_var = "B25003B_001"
+)
+
+white_acs <- get_acs(geography = "tract",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(white_ownocc = "B25003H_002"),
+                     summary_var = "B25003A_001"
+  
+)
+
+tot_acs <- get_acs(geography = "tract",
+                   state = "GA",
+                   year = 2019,
+                   survey = "acs5",
+                   variables = c(ownocc = "B25003_002"),
+                   summary_var = "B25003_001"
+)
+
+black_hor <- black_acs %>% 
+  mutate(black_hor = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, black_hor)
+  
+white_hor <- white_acs %>% 
+  mutate(white_hor = (estimate / summary_est) * 100) %>% 
+  select(GEOID, white_hor)
+
+tot_hor <- tot_acs %>% 
+  mutate(tot_hor = (estimate / summary_est) * 100) %>% 
+  select(GEOID, tot_hor)
+
+#HOR COUNTY
+black_acs_county <- get_acs(geography = "county",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(black_ownocc = "B25003B_002"),
+                     summary_var = "B25003B_001"
+)
+
+white_acs_county <- get_acs(geography = "county",
+                     state = "GA",
+                     year = 2019,
+                     survey = "acs5",
+                     variables = c(white_ownocc = "B25003H_002"),
+                     summary_var = "B25003A_001"
+  
+)
+
+tot_acs_county <- get_acs(geography = "county",
+                   state = "GA",
+                   year = 2019,
+                   survey = "acs5",
+                   variables = c(ownocc = "B25003_002"),
+                   summary_var = "B25003_001"
+)
+
+black_hor_county <- black_acs_county %>% 
+  mutate(black_hor_county = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, black_hor_county)
+  
+white_hor_county <- white_acs_county %>% 
+  mutate(white_hor_county = (estimate / summary_est) * 100) %>% 
+  select(GEOID, white_hor_county)
+
+tot_hor_county <- tot_acs_county %>% 
+  mutate(tot_hor_county = (estimate / summary_est) * 100) %>% 
+  select(GEOID, tot_hor_county)
+
+#HOR MSA 
+black_acs_msa <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+                         year = 2019,
+                         survey = "acs5",
+                         variables = c(black_ownocc = "B25003B_002"),
+                         summary_var = "B25003B_001"
+)
+
+
+white_acs_msa <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+                         year = 2019,
+                         survey = "acs5",
+                         variables = c(white_ownocc = "B25003H_002"),
+                         summary_var = "B25003A_001"
+)
+
+tot_acs_msa <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+                   year = 2019,
+                   survey = "acs5",
+                   variables = c(ownocc = "B25003_002"),
+                   summary_var = "B25003_001"
+)
+
+black_hor_msa <- black_acs_msa %>% 
+  mutate(black_hor_msa = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, black_hor_msa) 
+  
+white_hor_msa <- white_acs_msa %>% 
+  mutate(white_hor_msa = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, white_hor_msa) 
+ 
+tot_hor_msa <- tot_acs_msa %>% 
+  mutate(tot_hor_msa = (estimate / summary_est) * 100) %>% 
+  select(GEOID, NAME, tot_hor_msa)
+  
+hor_tract <- black_hor %>% 
+  left_join(white_hor, by = "GEOID") %>% 
+  left_join(tot_hor, by = "GEOID") %>% 
+  mutate(county_fips = str_sub(GEOID, 1, 5)) %>% 
+  pivot_longer(cols = c("black_hor", "white_hor", "tot_hor")) %>% 
+  mutate(county_fips_race = case_when(name == "black_hor" ~ paste0(county_fips, "_b"),
+                                      name == "white_hor" ~ paste0(county_fips, "_w"),
+                                      TRUE ~ paste0(county_fips, "_t"))
+         )
+
+
+hor_county <- black_hor_county %>% 
+  left_join(white_hor_county) %>% 
+  left_join(tot_hor_county) %>% 
+  pivot_longer(cols = c("black_hor_county", "white_hor_county", "tot_hor_county")) %>% 
+  mutate(county_fips_race = case_when(name == "black_hor_county" ~ paste0(GEOID, "_b"),
+                                      name == "white_hor_county" ~ paste0(GEOID, "_w"),
+                                      TRUE ~ paste0(GEOID, "_t"))
+         )
+
+hor_msa <- black_hor_msa %>% 
+  left_join(white_hor_msa) %>% 
+  left_join(tot_hor_msa) %>% 
+  left_join(crosswalk, by = c("GEOID" = "cbsacode")) %>% 
+  pivot_longer(cols = c("black_hor_msa", "white_hor_msa", "tot_hor_msa")) %>% 
+  mutate(county_fips_race = case_when(name =="black_hor_msa" ~ paste0(county_fips, "_b"),
+                                      name == "white_hor_msa" ~ paste0(county_fips, "_w"),
+                                      TRUE ~ paste0(county_fips, "_t"))) %>% 
+  select(-GEOID, -fipsstatecode, -fipscountycode, -state_fips, -NAME) %>% 
+  mutate(value = value / 100)
+hor_msa$name <- factor(hor_msa$name, levels = c("black_hor_msa", "white_hor_msa", "tot_hor_msa"))
+
+hor_clean <- hor_tract %>% 
+  left_join(hor_county, by = "county_fips_race") %>% 
+  left_join(hor_msa, by = "county_fips_race") %>% 
+  select(fips = GEOID.x, tract_name =  NAME.x, tract = value.x, county = value.y, msa = value, county_name = NAME.y, race = name.x) %>% 
+  pivot_longer(cols = tract:msa, names_to = "geo_type", values_to = "rate") %>% 
+  mutate(rate = (rate / 100))
+hor_clean$race <- factor(hor_clean$race, levels = c("black_hor", "white_hor", "tot_hor"))
+
+
+map_tract <- get_acs(geography = "tract",
+                    state = "GA",
+                    year = 2019,
+                    survey = "acs5",
+                    variable = "B19013_001",
+                    geometry = TRUE
+) %>% 
+  select(-estimate, -moe, -variable) %>% 
+  rename(fips = GEOID) %>% 
+  mutate(county_fips = str_sub(fips, 1, 5)) %>%
+  left_join(counties_tracts, by = "fips")
+
+msa_geo <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+               year = 2019,
+               survey = "acs5",
+               variable = "B19013_001",
+               geometry = TRUE
+               ) %>% 
+  select(msa_code = GEOID, msa_name = NAME, geometry)
+
+map_data <- map_tract %>% 
+  st_join(msa_geo, join = st_within) %>% 
+  filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area") %>% 
+  left_join(hor_clean, by = "fips") %>% 
+  filter(geo_type == "tract") %>%
+  select(fips, NAME, county_fips = county_fips.x, tract_name = tract_name.x, county_name = county_name.x, msa_code, msa_name, geometry, race, -geo_type,
+         rate) %>% 
+  mutate(race = case_when(race == "black_hor" ~ "black", 
+                          race == "white_hor" ~ "white",
+                          race == "tot_hor" ~ "total"),
+         rate = rate * 100,
+         rate = round(rate, 1),
+         rate = paste0(rate, "%")
+  ) %>% 
+  pivot_wider(names_from = "race", values_from = "rate")
+
+pal <- colorFactor(
+  palette = "magma",
+  domain = map_data$county_name
+)
+
+
+```
+
+Market Analysis {.tabset}
+-----------------------------------------------------------------------
+This is a placeholder for a section that will include information to  help lenders target their programs. We will work with lenders to determine what would be most useful to include in this section. It will likely include an interactive map with census tract data on demographics, income, and homeownership rates by race. 
+
+```{r echo = FALSE}
+
+labels <- paste(
+  "<strong><br>Homeownership Rates",
+  "</strong><br>Black:", map_data$black,
+  "</strong><br>White:", map_data$white,
+  "</strong><br>Total:", map_data$total) %>% 
+  lapply(htmltools::HTML)
+
+
+  map_data %>% 
+    leaflet() %>% 
+    addProviderTiles(providers$Stamen.TonerLite) %>% 
+    addPolygons(color = ~pal(county_name),
+                weight = 0.5,
+                label = ~labels,
+                layerId = ~tract_name)
+
+```
+

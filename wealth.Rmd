@@ -1,5 +1,5 @@
 ---
-title: "wealth"
+title: "Data Tool Prototype"
 output: html_document
 ---
 
