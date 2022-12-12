@@ -1,0 +1,485 @@
+---
+title: "wealth"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+library(tidyverse)
+library(tidycensus)
+library(urbnthemes)
+library(urbnmapr)
+library(shiny)
+library(leaflet)
+library(sf)
+library(tigris)
+library(ipumsr)
+library(highcharter)
+library(readxl)
+library(htmltools)
+
+set_urbn_defaults(style = "print")
+
+
+##national wealth gap
+msa_acs <- get_acs(geography = "metropolitan statistical area/micropolitan statistical area",
+               year = 2019,
+               survey = "acs5",
+               variable = "B19013_001"
+) %>% 
+  select(msa_code = GEOID, msa_name = NAME) %>% 
+  filter(str_detect(msa_name, "GA"))
+
+crosswalk <- read.csv("crosswalk.csv") %>% 
+  select(cbsacode, cbsatitle, fipsstatecode, fipscountycode) %>% 
+  mutate(state_fips = str_pad(fipsstatecode, 2, "left", "0"),
+         county_fips = str_pad(fipscountycode, 3, "left", "0"),
+         county_fips = str_c(state_fips, county_fips),
+         cbsacode = as.character(cbsacode))
+
+msa_list <- msa_acs %>% 
+  left_join(crosswalk, by = c("msa_code" = "cbsacode"))
+
+
+race <- c("Black", "White")
+wealth <- c(24100, 188200)
+wealth_gap <- data.frame(race, wealth)
+
+parent_worth <- c("<10K", "$10K - 50K", "50K - 150K", "150K - 300K", ">300K")
+rate <- c(.1414, .1908, .2965, .3176, .3639)
+parent_wealth <-data.frame(parent_worth, rate)
+parent_wealth$parent_worth <- factor(parent_wealth$parent_worth, levels = c("<10K", "$10K - 50K", "50K - 150K", "150K - 300K", ">300K"))
+
+financial_health <- read_xlsx ("3_city_financial_health_metrics.xlsx") %>% 
+  rename("city_name" = "city name",
+         "Total" = "Median net worth (estimated); Overall",
+         "White" = "Median net worth (estimated); White",
+         "Black" = "Median net worth (estimated); Black") %>% 
+  mutate(White = as.numeric(White),
+         Black = as.numeric(Black)) %>% 
+  select(city_name, Black, White, Total) %>% 
+  pivot_longer(Black:Total, names_to = "race", values_to = "net_worth" )
+financial_health$race <- factor(financial_health$race, levels = c("Black", "White", "Total"))
+
+##cost burden
+ddi <- read_ipums_ddi("usa_00028.xml")
+data <- read_ipums_micro(ddi) %>% 
+  rename_all(tolower) %>% 
+  filter(pernum == 1)
+
+race <- c("Black", "Total", "White")
+burden_race_national <- c(.51, .46, .42)
+national_burden <- data.frame(race, burden_race_national)
+
+
+burden_msa_tot <- data %>% 
+  select(msa_name = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
+  filter(county_fips != 000,
+         rent != 0) %>% 
+  mutate(county_fips = str_pad(county_fips, 3, "left", "0"),
+         state_fips = str_pad(state_fips, 2, "left", "0"),
+         county_fips = str_c(state_fips, county_fips)) %>%
+  filter(hhincome != 9999999,
+         ownershp == 2) %>%
+  mutate(rent = (rent *12),
+         ratio = (rent / hhincome),
+         ethrace = "tot") %>% 
+  group_by(msa_name) %>% 
+  summarise(msa = (sum(hhwt[ratio >= .30] / sum(hhwt), na.rm = TRUE)),
+            county_fips = county_fips,
+            ethrace = ethrace) %>% 
+  unique()
+
+burden_msa <- data %>% 
+  select(msa_name = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
+  filter(county_fips != 000,
+         rent != 0) %>% 
+  mutate(ethrace = case_when(race == 1 & hispan == 0 ~ "white", 
+                             race == 2 & hispan == 0 ~ "black"),
+         county_fips = str_pad(county_fips, 3, "left", "0"),
+         state_fips = str_pad(state_fips, 2, "left", "0"),
+         county_fips = str_c(state_fips, county_fips)) %>%
+  filter(hhincome != 9999999,
+         ethrace %in% c("white", "black"),
+         ownershp == 2) %>%
+  mutate(rent = (rent * 12),
+         ratio = (rent / hhincome)) %>% 
+  group_by(msa_name, ethrace) %>% 
+  summarise(msa = (sum(hhwt[ratio >= .30] / sum(hhwt), na.rm = TRUE)),
+            county_fips = county_fips) %>% 
+  unique() %>% 
+  rbind(burden_msa_tot) %>%
+  arrange(msa_name, county_fips, ethrace) %>% 
+  unique() %>% 
+  mutate(county_fips_race = case_when(ethrace == "black" ~ paste0(county_fips, "_b"),
+                                      ethrace == "white" ~ paste0(county_fips, "_w"),
+                                      TRUE ~ paste0(county_fips, "_t"))
+  )
+
+  
+burden_county_tot <- data %>% 
+  select(msa_name = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
+  filter(county_fips != 000,
+         rent != 0) %>% 
+  mutate(county_fips = str_pad(county_fips, 3, "left", "0"),
+         state_fips = str_pad(state_fips, 2, "left", "0"),
+         county_fips = str_c(state_fips, county_fips)) %>%
+  filter(hhincome != 9999999,
+         ownershp == 2) %>%
+  mutate(rent = (rent * 12),
+         ratio = (rent / hhincome)) %>% 
+  group_by(county_fips) %>% 
+  summarise(county = (sum(hhwt[ratio >= .30] / sum(hhwt), na.rm = TRUE)),
+            county_fips = county_fips) %>% 
+  mutate(ethrace = "tot") %>%  
+  unique()
+
+
+burden_county <- data %>% 
+  select(msa = met2013, state_fips = statefip, county_fips = countyfip, hhincome, ownershp, race, hispan, rent, hhwt) %>% 
+  filter(county_fips != 000,
+         rent != 0) %>% 
+  mutate(ethrace = case_when(race == 1 & hispan == 0 ~ "white", 
+                             race == 2 & hispan == 0 ~ "black"),
+         county_fips = str_pad(county_fips, 3, "left", "0"),
+         state_fips = str_pad(state_fips, 2, "left", "0"),
+         county_fips = str_c(state_fips, county_fips)) %>%
+  filter(hhincome != 9999999,
+         ethrace %in% c("white", "black"),
+         ownershp == 2) %>%
+  mutate(rent = (rent * 12),
+         ratio = (rent / hhincome)) %>% 
+  group_by(county_fips, ethrace) %>% 
+  summarise(county = (sum(hhwt[ratio >= .30] / sum(hhwt), na.rm = TRUE)),
+            county_fips = county_fips) %>% 
+  unique() %>% 
+  rbind(burden_county_tot) %>%
+  arrange(county_fips, ethrace) %>% 
+  unique() %>% 
+  mutate(county_fips_race = case_when(ethrace == "black" ~ paste0(county_fips, "_b"),
+                                    ethrace == "white" ~ paste0(county_fips, "_w"),
+                                    TRUE ~ paste0(county_fips, "_t"))
+)
+
+
+burden <- burden_county %>% 
+  left_join(burden_msa, by = "county_fips_race") %>% 
+  select(msa_name, county_fips = county_fips.x, race = ethrace.x, msa, county) %>% 
+  arrange(msa_name, county_fips, race) %>% 
+  pivot_longer(cols = msa:county, names_to = "geo_type", values_to = "burden_share") %>% 
+  mutate(msa_name = as.character(msa_name)) %>% 
+  left_join(msa_list, by = c("msa_name" = "msa_code")) %>% 
+  select(msa_code = msa_name, msa_name = msa_name.y, county_fips = county_fips.x, race, geo_type, burden_share) %>% 
+  unique()
+burden$race <- factor(burden$race, levels = c("black", "white", "tot"))
+
+##wealth by tenure
+tenure <- c("Renter", "Owner")
+wealth <- c(6300, 255000)
+wealth_tenure <- data.frame(tenure, wealth)
+
+
+##LTV
+ltv <- read.csv("ltv_share_msa_county.csv") %>% 
+  select(derived_msa_md, county_fips, race = raceeth, below_5_county, above_20_county, below_5_msa, above_20_msa) %>% 
+  pivot_longer(cols = below_5_county:above_20_msa, names_to = "down", values_to = "rate") %>% 
+  mutate(payment = case_when(down %in% c("below_5_county", "below_5_msa") ~ "below 5",
+                             down %in% c("above_20_county", "above_20_msa") ~ "above 20"),
+         geo_type = case_when(down %in% c("below_5_county", "above_20_county") ~ "county",
+                              down %in% c("below_5_msa", "above_20_msa") ~ "msa")) %>% 
+  select(-down) %>% 
+  mutate(msa_code = as.character(derived_msa_md)) %>%
+  left_join(msa_acs, by = "msa_code") %>% 
+  filter(geo_type != "county")
+
+ltv_national <- read.csv("ltv_share_national.csv") %>% 
+  pivot_longer(cols = below_5:above_20, names_to = "down", values_to = "rate")
+  
+
+##Source of Down Payment
+nsmo_clean <- read.csv("nsmo_clean.csv")
+
+source_race <- nsmo_clean %>%
+  filter(race_eth %in% c("White", "Black"),
+         mortgage_reason == 1,
+         sale_proceeds != -2,
+         savings_retire_etc != -2,
+         govt_np_asst != -2,
+         second_lien_heloc != -2 & second_lien_heloc != -3,
+         gift != -2,
+         seller_cont != -2) %>% 
+  group_by(race_eth) %>% 
+  summarise(sale_proceeds = weighted.mean(sale_proceeds, w = weight, na.rm = TRUE),
+            savings_retire_etc = weighted.mean(savings_retire_etc, w = weight, na.rm = TRUE),
+            govt_np_asst = weighted.mean(govt_np_asst, w = weight, na.rm = TRUE),
+            second_lien_heloc = weighted.mean(second_lien_heloc, w = weight, na.rm = TRUE),
+            gift = weighted.mean(gift, w = weight, na.rm = TRUE),
+            seller_cont = weighted.mean(seller_cont, w = weight, na.rm = TRUE)
+            )
+
+source_tot <- nsmo_clean %>% 
+  filter(mortgage_reason == 1,
+         sale_proceeds != -2,
+         savings_retire_etc != -2,
+         govt_np_asst != -2,
+         second_lien_heloc != -2 & second_lien_heloc != -3,
+         gift != -2,
+         seller_cont != -2) %>% 
+  summarise(sale_proceeds = weighted.mean(sale_proceeds, w = weight, na.rm = TRUE),
+            savings_retire_etc = weighted.mean(savings_retire_etc, w = weight, na.rm = TRUE),
+            govt_np_asst = weighted.mean(govt_np_asst, w = weight, na.rm = TRUE),
+            second_lien_heloc = weighted.mean(second_lien_heloc, w = weight, na.rm = TRUE),
+            gift = weighted.mean(gift, w = weight, na.rm = TRUE),
+            seller_cont = weighted.mean(seller_cont, w = weight, na.rm = TRUE)
+  ) %>% 
+  mutate(race_eth = "Total")
+
+source <- source_race %>% 
+  rbind(source_tot)
+source$race_eth <- factor(source$race_eth, levels = c("Black", "White", "Total"))
+
+```
+
+Wealth Disparities: Black Renters are Less Likely to Have Access to Wealth for Down Payments
+============================================================================
+
+Black and Latino families consistently cite lack of cash for downpayment and closing costs as the primary barrier to becoming homeowners (Goodman et al. 2018). Black and Latino families have a fraction of the wealth of white families (see charts below). When cars (which are non-liquid assets and often overvalued by owners) are removed from the calculation, the median white family’s wealth increases from about 10 times the wealth of the median Black family and 8 times the wealth of the median Hispanic family to more than 30 times the wealth of the median Black family and over 20 times the wealth of the median Hispanic family (Moore and Bruenig 2017). 
+
+Due to a legacy of being barred from wealth building opportunities, especially from the post WWII housing boom that created the white middle class, these gaps continue to compound from generation to generation.  Thirty percent of white families receive an inheritance or gift, compared to about 10 percent of Black families and 7 percent of Hispanic families. (Bhutta et al. 2020). These wealth disparities echo into all other areas of opportunity, across generations. For example, Black consumers are more likely to rely on student loans to access higher education and tend to borrow more and experience higher rates of default than white consumers, draining savings that may otherwise be put toward buying a home (Blagg et al. 2022).
+
+One report estimates that it would take the typical Latino renter household 11 years and the typical Black renter household 14 years to save for a 5% downpayment; and this does not even factor in closing costs and reserve requirements. Black households are less likely to have had parents who were homeowners and/or owned over $200,000 in wealth, both of which greatly increase the likelihood of becoming an owner (Choi,  Zhu & Goodman 2018). The median net worth of parents of young white adults is over $200,000, compared to less than $20,000 for parents of young Black adults and $35,000 for parents of young Latino adults. Gifts from relatives account for approximately 32% percent of down-payments for first-time home buyers (National Association of Realtors 2019), and loans from family and friends are also a substantial source of downpayment (Zillow 2022). More than 1.7 million mortgage-ready young Black renters could afford a median-price home in the 31 most-populous metropolitan statistical areas if they could come up with a funds to close (McCargo, Choi, and Golding 2019). 
+
+In 2019, households of color accounted for 32 percent of all households but only held 24 percent of primary-residence housing wealth (Neal et al. 2021, Dettling et al. 2017). Even when they do become homeowners, they often do not reap the same wealth-building benefits as white households. There is evidence that homes owned by people of color as well as homes located in majority non-white communities are systematically undervalued by appraisers (by $48,000 per home on average) and these homes are susceptible to larger errors even in automated-valuations (Perry  2018, Neal, Strochak and Young 2020).
+
+
+
+Median Household Wealth {.tabset}
+-----------------------------------------------------------------------
+
+### Median Wealth by Race, National
+Black homebuyers are less likely to have access to wealth for down payments. The median wealth for Black households is $24,000 compared to $188,000 for white households. 
+
+```{r echo = FALSE}
+
+ wealth_gap %>% 
+    ggplot(aes(x = race, y = wealth, label = scales::dollar(wealth))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7), vjust = -0.5) +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    ggtitle("Median Wealth by Race, National") +
+    xlab("Race") +
+    ylab("Median Wealth") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+### Median Household Wealth by Race, City
+City-level results mirror the national results: in almost all cases the median wealth of white households is greater than the median wealth of black households. In Atlanta, the median wealth of Black households is $5,180, compared to $238,354 for white households.
+
+
+```{r echo = FALSE}
+
+  financial_health %>% 
+    filter(city_name == "Atlanta, GA") %>%
+    ggplot(aes(x = race, y = net_worth, label = scales::dollar(net_worth))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7), vjust = -0.5) +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    ggtitle("Median Household Wealth by Race, Atlanta") +
+    xlab("Race") +
+    ylab("Median Wealth") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+Cost Burden {.tabset}
+-----------------------------------------------------------------------
+
+### Rental Cost Burden by Race, National
+Rental cost burden is just one component driving the wealth gap. Black families are much more likely to spend at least 30% of their income on rent, meaning they have a smaller proportion of their income available to save. Nationally, 51% of Black renter households are cost burdened, compared to only 42% of White households.
+
+```{r echo = FALSE}
+
+ national_burden %>%   
+    ggplot(aes(x = race, y = burden_race_national, label = scales::percent(burden_race_national))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7), vjust = -0.5) +
+    scale_fill_discrete(name = "Race", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    ggtitle("Rental Cost Burden by Race, National") +
+    xlab("Race") +
+    ylab("Rental Cost Burden Share") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+
+### Rental Cost Burden by Race, MSA
+In the Atlanta - Sandy Springs - Alpharetta MSA, 43% of Black Households are rental cost burdened, compared to 30% of white households. 
+
+```{r echo = FALSE}
+
+ burden %>%   
+    filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area",
+           geo_type == "msa") %>% 
+    mutate(burden_share = round(burden_share, 2)) %>% 
+    ggplot(aes(x = race, y = burden_share, label = scales::percent(burden_share))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7), vjust = -0.5) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    ggtitle("Rental Cost Burden by Race, Atlanta MSA") +
+    xlab("Race") +
+    ylab("Cost Burden Share") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+Wealth and Homeownership {.tabset}
+-----------------------------------------------------------------------
+
+### Wealth by Tenure, National
+Homeownership is also a wealth-building vehicle, and the historic homeownership gap has limited wealth building opportunities for Black households. The median net worth for a homeowning household is $255,000, compared to only $6,300 for renters. Importantly, the majority of Black and Latino households are renting households.
+
+```{r echo = FALSE}
+
+  wealth_tenure %>% 
+    ggplot(aes(x = tenure, y = wealth, label = scales::dollar(wealth))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7), vjust = -0.5) +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    ggtitle("Median Wealth by Tenure") +
+    xlab("Tenure") +
+    ylab("Median Wealth") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+### Homeownership Rate by Parental Wealth, National
+Intergenerational wealth transfers also impact the ability to achieve homeownership. Homeownership rates increase as parental wealth increases.
+
+```{r echo = FALSE}
+ parent_wealth %>% 
+    ggplot(aes(x = parent_worth, y = rate, label = scales::percent(rate))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7), vjust = -0.5) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    scale_x_discrete(labels = c("Less than\n$10k", "$10k -\n$50k", "$50k -\n$150k", "$150k -\n$300", "$300k\n and above")) +
+    ggtitle("Homeownership Rate by Parental Wealth, National") +
+    xlab("Parental Wealth") +
+    ylab("Homeownership Rate") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+Race and Downpayments {.tabset}
+-----------------------------------------------------------------------
+### Percent of households putting down 5% or below and 20% or above by race, National
+The wealth gap manifests in fewer resources for Black households for downpayments, limiting their homebuying options. Nationally, only 11% of Black households put down at least 20% on their home, compared to 39% for white households.
+
+```{r echo = FALSE}
+
+  ltv_national %>% 
+    ggplot(aes(x = down, y = rate, fill = raceeth, label = scales::percent(rate))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7),
+              vjust = -0.5)  +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("At least 20%", "5% and below")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    ggtitle("Percent of Households Putting Down 5% or Below and 20% or Above by Race, National") +
+    xlab("Down Payment Amount") +
+    ylab("Share of Homebuyers") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+
+### Percent of households putting down 5% or below and 20% or above by race, MSA
+In the Atlanta - Sandy Springs - Alpharetta MSA, only 11% of Black households put down at least 20% on their home, comapred to 42% of white households.
+
+```{r echo = FALSE}
+
+  ltv %>% 
+    filter(msa_name == "Atlanta-Sandy Springs-Alpharetta, GA Metro Area") %>% 
+    ggplot(aes(x = payment, y = rate, fill = race, label = scales::percent(rate))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7),
+              vjust = -0.5)  +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_x_discrete(labels = c("At least 20%", "5% and below")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    ggtitle("Percent of Households Putting Down 5% or Below and 20% or Above by Race, Atlanta MSA") +
+    xlab("Down Payment Amount") +
+    ylab("Share of Homebuyers") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+```
+
+
+### Used Gov't or Nonprofit Downpayment Assistance, National
+13% of Black households used government or nonprofit downpayment assistance, compared to only 6% of white households, further indicating that Black downpayment savings remain a barrier for Black households. 
+
+```{r echo = FALSE}
+
+  source %>% 
+    mutate(govt_np_asst = round(govt_np_asst, 3)) %>% 
+    ggplot(aes(x = race_eth, y = govt_np_asst, label = scales::percent(govt_np_asst))) +
+    geom_col(position = "dodge") +
+    geom_text(position = position_dodge(width = .7), vjust = -0.5) +
+    scale_fill_discrete(name = "", labels = c("Black", "White", "Total")) +
+    scale_y_continuous(labels = scales::percent_format()) +
+    ggtitle("Share of Homebuyers who Used Government or Nonprofit Downpayment Assistance, National") +
+    xlab("Race") +
+    ylab("Share of Homebuyers") +
+    labs(caption = "Source: chart produced by Urban Institute, 2022.") +
+    theme(axis.text.x = element_text(size= 20),
+          axis.text.y = element_text(size = 20),
+          legend.title = element_text(size = 20),
+          legend.text = element_text(size = 20),
+          plot.caption = element_text(hjust = 0))
+
+
+```
